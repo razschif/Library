@@ -17,6 +17,7 @@
 const BOOKS_FILE = "books.json";
 const YEAR_LABELS = { 1: "שנה א'", 2: "שנה ב'", 3: "שנה ג'" };
 const MAX_PERSON_ICONS = 5; // how many little person icons to show on a card
+const SHOW_BOOK_COVERS = false; // set to false to hide all book covers
 
 // Compares Hebrew (and English) text the way a Hebrew reader expects.
 const hebrewCollator = new Intl.Collator("he", { sensitivity: "base", numeric: true });
@@ -179,7 +180,7 @@ function fillLink(link, url) {
 }
 
 function fillCover(img, book, card) {
-  if (!book.cover) return;
+  if (!SHOW_BOOK_COVERS || !book.cover) return;
   img.src = book.cover;
   img.alt = "כריכת הספר " + book.title;
   img.hidden = false;

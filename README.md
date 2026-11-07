@@ -79,6 +79,10 @@ Version: New version → Deploy**. The URL stays the same.
 **Settings** at the top of `Code.gs`:
 - `MAX_BOOKS_PER_PERSON = 0` means no limit. Set it to `1` to allow only one book per person.
 
+To control whether covers are shown, change `SHOW_BOOK_COVERS` near the top of
+`script.js` to `true` or `false`. This is a code setting, not a user-facing
+option.
+
 **Privacy:** the sheet holds names and personal numbers. Share it only with
 the staff who need it. The website itself never shows, logs or saves them.
 
