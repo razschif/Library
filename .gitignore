@@ -1,0 +1,9 @@
+# Files that stay on your computer and are NOT uploaded to GitHub
+books.xlsx
+presentation.pptx
+main.html
+~$*
+__pycache__/
+
+# Duplicate copy of a book (not used by the site)
+Books/Psychology of Intelligence Analysis (1).pdf

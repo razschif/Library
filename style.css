@@ -1,0 +1,372 @@
+/*
+ * style.css - the look of the site.
+ * Colors and fonts come from the presentation (presentation.pptx).
+ * Change a color once here, under :root, and it changes everywhere.
+ */
+
+:root {
+  --teal: #1F5F66;        /* main color: titles, buttons */
+  --teal-dark: #174A50;   /* buttons when hovered */
+  --gold: #D9A45B;        /* accent line under titles */
+  --cream: #F6F3EC;       /* page background */
+  --card: #FFFFFF;        /* card background */
+  --teal-light: #E3EEEE;  /* chips and soft backgrounds */
+  --border: #D5DEDE;      /* thin lines */
+  --text: #1F2A30;        /* main text */
+  --muted: #5A6B70;       /* secondary text */
+  --error: #B3261E;       /* error messages */
+  --success: #2E7D4F;     /* success messages */
+
+  --font-text: "Assistant", Arial, sans-serif;
+  --font-title: "Secular One", "Assistant", Arial, sans-serif;
+  --radius: 12px;
+  --shadow: 0 2px 10px rgba(31, 42, 48, 0.08);
+}
+
+/* ===== Basics ===== */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--text);
+  font-family: var(--font-text);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+/* The hidden attribute must always win, even over display rules below. */
+[hidden] { display: none !important; }
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ===== Header ===== */
+
+.site-header {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 28px 0 22px;
+}
+
+.header-inner {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+h1 {
+  margin: 0;
+  color: var(--teal);
+  font-weight: 800;
+  font-size: clamp(2rem, 6vw, 2.8rem);
+  line-height: 1.15;
+}
+
+/* The short gold line under titles, like in the presentation */
+.accent-rule {
+  display: block;
+  width: 64px;
+  height: 4px;
+  margin: 10px 0 12px;
+  background: var(--gold);
+  border-radius: 2px;
+}
+
+.intro {
+  margin: 0;
+  color: var(--muted);
+  max-width: 60ch;
+}
+
+.demo-banner {
+  margin: 0;
+  padding: 8px 16px;
+  background: #FFF4DF;
+  border-bottom: 1px solid var(--gold);
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ===== Buttons ===== */
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 9px 18px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.btn:focus-visible,
+select:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.btn:disabled { opacity: 0.6; cursor: wait; }
+
+.btn-primary { background: var(--teal); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--teal-dark); }
+
+.btn-secondary { background: transparent; color: var(--teal); border-color: var(--teal); }
+.btn-secondary:hover:not(:disabled) { background: var(--teal-light); }
+
+.btn-danger { background: transparent; color: var(--error); border-color: currentColor; }
+.btn-danger:hover:not(:disabled) { background: #FBEAEA; }
+
+.btn-small { padding: 4px 12px; font-size: 0.9rem; }
+
+/* ===== Filters and sorting ===== */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  align-items: flex-end;
+  margin: 24px 0 8px;
+  padding: 16px 20px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.control-label {
+  font-weight: 800;
+  color: var(--teal);
+  padding: 0;
+}
+
+select {
+  font: inherit;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  max-width: 100%;
+}
+
+.year-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding-block: 6px;
+}
+
+.year-option { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.year-option input { width: 18px; height: 18px; accent-color: var(--teal); }
+
+.results-count { color: var(--muted); margin: 8px 0 16px; }
+
+/* ===== Book cards ===== */
+
+.book-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 20px;
+  padding-bottom: 48px;
+}
+
+.book-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border-top: 4px solid var(--teal);
+  overflow: hidden;
+}
+
+.book-cover {
+  width: 100%;
+  height: 220px;
+  object-fit: contain;
+  background: var(--teal-light);
+  padding: 12px;
+}
+
+.book-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 18px 20px 20px;
+}
+
+.book-subject {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.book-title {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 1.3rem;
+  line-height: 1.35;
+  color: var(--teal);
+}
+
+.book-author { margin: 4px 0 10px; color: var(--muted); }
+
+.book-years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.book-years li {
+  background: var(--teal-light);
+  color: var(--teal);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 1px 10px;
+  border-radius: 999px;
+}
+
+/* flex: 1 pushes the footer (button) to the bottom, so buttons line up */
+.book-description { margin: 0 0 12px; flex: 1; }
+
+.book-link {
+  align-self: flex-start;
+  margin-bottom: 14px;
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.book-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.book-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.person-icons { display: inline-flex; gap: 1px; }
+.person-icon { width: 15px; height: 15px; fill: var(--gold); }
+
+/* ===== Pop-ups ===== */
+
+.dialog {
+  width: min(92vw, 440px);
+  border: 0;
+  border-radius: var(--radius);
+  padding: 24px;
+  color: var(--text);
+  box-shadow: 0 10px 40px rgba(31, 42, 48, 0.3);
+}
+
+.dialog::backdrop { background: rgba(31, 42, 48, 0.55); }
+
+.dialog-title { margin: 0 0 4px; color: var(--teal); font-weight: 800; font-size: 1.4rem; }
+
+.dialog-book {
+  margin: 0 0 18px;
+  font-family: var(--font-title);
+  font-size: 1.1rem;
+  padding-inline-start: 10px;
+  border-inline-start: 4px solid var(--gold);
+}
+
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; font-weight: 600; }
+
+.field input {
+  font: inherit;
+  font-weight: 400;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.field input[dir="ltr"] { text-align: right; letter-spacing: 0.08em; }
+/* The number is typed left-to-right, but the Hebrew hint text reads right-to-left */
+.field input[dir="ltr"]::placeholder { direction: rtl; letter-spacing: normal; }
+.field input[aria-invalid="true"] { border-color: var(--error); background: #FFF8F8; }
+
+.field-error { color: var(--error); font-size: 0.9rem; font-weight: 600; min-height: 1.4em; }
+
+.form-error {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #FBEAEA;
+  color: var(--error);
+  font-weight: 600;
+}
+
+.hint { color: var(--muted); margin: 0 0 14px; }
+
+.dialog-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.success { text-align: center; }
+.success .dialog-buttons { justify-content: center; }
+
+.success-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 56px;
+}
+
+.mine-list { list-style: none; margin: 14px 0; padding: 0; }
+
+.mine-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ===== Phones ===== */
+
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  .site-header { padding: 20px 0 16px; }
+  .header-inner { align-items: stretch; flex-direction: column; }
+  .controls { flex-direction: column; align-items: stretch; padding: 14px 16px; }
+  .dialog { padding: 20px 16px; }
+  .dialog-buttons .btn { flex: 1; }
+}

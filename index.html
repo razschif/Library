@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ספריית המודיעין</title>
+
+  <!-- Fonts from the presentation: Assistant (text) and Secular One (book titles) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;800&family=Secular+One&display=swap">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== Page header ===== -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <div>
+        <h1>ספריית המודיעין</h1>
+        <span class="accent-rule" aria-hidden="true"></span>
+        <p class="intro">בוחרים נושא, מעיינים בספרים ובוחרים ספר. אפשר לבחור יותר מספר אחד ולהסיר בחירה בכל זמן.</p>
+      </div>
+      <button type="button" id="my-choices-btn" class="btn btn-secondary">הבחירות שלי</button>
+    </div>
+  </header>
+
+  <!-- Shown only while api.js has no server URL -->
+  <p id="demo-banner" class="demo-banner" hidden>
+    מצב הדגמה: עדיין לא חובר שרת, ולכן הבחירות נשמרות רק עד רענון הדף.
+  </p>
+
+  <main class="container">
+
+    <!-- ===== Filters and sorting ===== -->
+    <section class="controls" aria-label="סינון ומיון">
+      <label class="control">
+        <span class="control-label">מקצוע</span>
+        <select id="subject-filter">
+          <option value="all">כל המקצועות</option>
+          <!-- script.js adds one option per subject found in books.json -->
+        </select>
+      </label>
+
+      <fieldset class="control" id="year-filter">
+        <legend class="control-label">שנה</legend>
+        <div class="year-options">
+          <label class="year-option"><input type="checkbox" value="1" checked> שנה א'</label>
+          <label class="year-option"><input type="checkbox" value="2" checked> שנה ב'</label>
+          <label class="year-option"><input type="checkbox" value="3" checked> שנה ג'</label>
+        </div>
+      </fieldset>
+
+      <label class="control">
+        <span class="control-label">מיון</span>
+        <select id="sort-select">
+          <option value="name-asc">לפי שם (א ← ת)</option>
+          <option value="name-desc">לפי שם (ת ← א)</option>
+          <option value="year-asc">לפי שנה (א' ← ג')</option>
+          <option value="year-desc">לפי שנה (ג' ← א')</option>
+        </select>
+      </label>
+    </section>
+
+    <!-- "Showing X books" - screen readers announce changes -->
+    <p id="results-count" class="results-count" aria-live="polite"></p>
+
+    <!-- The book cards go here -->
+    <div id="book-list" class="book-list"></div>
+  </main>
+
+  <!-- ===== Blueprint for one book card. script.js copies it for each book. ===== -->
+  <template id="book-card-template">
+    <article class="book-card">
+      <img class="book-cover" alt="" loading="lazy" hidden>
+      <div class="book-body">
+        <p class="book-subject"></p>
+        <h2 class="book-title" dir="auto"></h2>
+        <p class="book-author" dir="auto"></p>
+        <ul class="book-years" aria-label="שנים רלוונטיות"></ul>
+        <p class="book-description" dir="auto"></p>
+        <a class="book-link" target="_blank" rel="noopener" hidden>לעיון בספר</a>
+        <div class="book-footer">
+          <button type="button" class="btn btn-primary choose-btn">בחירת ספר זה</button>
+          <p class="book-count"></p>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <!-- ===== Pop-up: choose a book ===== -->
+  <dialog id="choose-dialog" class="dialog" aria-labelledby="choose-heading">
+    <!-- Step 1: the form -->
+    <form id="choose-form" novalidate>
+      <h2 id="choose-heading" class="dialog-title">בחירת ספר</h2>
+      <p class="dialog-book" dir="auto" id="choose-book-title"></p>
+
+      <label class="field">
+        <span>שם מלא</span>
+        <input type="text" id="choose-name" maxlength="60" autocomplete="off" required>
+        <span class="field-error" id="choose-name-error" aria-live="polite"></span>
+      </label>
+
+      <label class="field">
+        <span>מספר אישי</span>
+        <input type="text" id="choose-id" dir="ltr" inputmode="numeric"
+               autocomplete="off" placeholder="7 ספרות" required>
+        <span class="field-error" id="choose-id-error" aria-live="polite"></span>
+      </label>
+
+      <p class="form-error" id="choose-error" role="alert" hidden></p>
+
+      <div class="dialog-buttons">
+        <button type="submit" class="btn btn-primary" id="choose-submit">אישור</button>
+        <button type="button" class="btn btn-secondary" data-close>ביטול</button>
+      </div>
+    </form>
+
+    <!-- Step 2: success message -->
+    <div id="choose-success" class="success" hidden>
+      <p class="success-icon" aria-hidden="true">✓</p>
+      <h2 class="dialog-title">הבחירה נשמרה!</h2>
+      <p>הספר <strong dir="auto" id="success-book-title"></strong> נוסף לבחירות שלך.</p>
+      <p class="hint">אפשר לראות ולהסיר בחירות בכפתור "הבחירות שלי".</p>
+      <div class="dialog-buttons">
+        <button type="button" class="btn btn-primary" data-close>סגירה</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ===== Pop-up: my choices ===== -->
+  <dialog id="mine-dialog" class="dialog" aria-labelledby="mine-heading">
+    <h2 id="mine-heading" class="dialog-title">הבחירות שלי</h2>
+
+    <!-- Step 1: identify -->
+    <form id="mine-form" novalidate>
+      <p class="hint">כדי לראות את הספרים שבחרת, יש להזין את אותם הפרטים שהזנת בבחירה.</p>
+      <label class="field">
+        <span>שם מלא</span>
+        <input type="text" id="mine-name" maxlength="60" autocomplete="off" required>
+        <span class="field-error" id="mine-name-error" aria-live="polite"></span>
+      </label>
+      <label class="field">
+        <span>מספר אישי</span>
+        <input type="text" id="mine-id" dir="ltr" inputmode="numeric"
+               autocomplete="off" placeholder="7 ספרות" required>
+        <span class="field-error" id="mine-id-error" aria-live="polite"></span>
+      </label>
+      <div class="dialog-buttons">
+        <button type="submit" class="btn btn-primary" id="mine-submit">הצגה</button>
+        <button type="button" class="btn btn-secondary" data-close>ביטול</button>
+      </div>
+    </form>
+
+    <!-- Step 2: the list of chosen books -->
+    <div id="mine-results" hidden>
+      <ul id="mine-list" class="mine-list"></ul>
+      <p id="mine-empty" class="hint" hidden>עדיין לא בחרת ספרים.</p>
+      <div class="dialog-buttons">
+        <button type="button" class="btn btn-primary" data-close>סגירה</button>
+      </div>
+    </div>
+
+    <p class="form-error" id="mine-error" role="alert" hidden></p>
+  </dialog>
+
+  <!-- api.js must load first: script.js uses its functions -->
+  <script src="api.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
