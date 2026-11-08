@@ -110,6 +110,7 @@ h1 {
 .btn:focus-visible,
 select:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 a:focus-visible {
   outline: 3px solid var(--gold);
   outline-offset: 2px;
@@ -260,6 +261,21 @@ select {
   font-weight: 600;
 }
 
+.book-rating-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.book-rating { margin: 0; font-size: 0.9rem; color: var(--muted); }
+
+/* Stars showing a rating. The filled ones come first, so they start on the right. */
+.stars { color: var(--gold); letter-spacing: 1px; }
+.stars-empty { color: var(--border); }
+
 .book-footer {
   display: flex;
   align-items: center;
@@ -307,7 +323,11 @@ select {
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; font-weight: 600; }
 
-.field input {
+.field select { font-weight: 400; }
+.field select[aria-invalid="true"] { border-color: var(--error); background: #FFF8F8; }
+
+.field input,
+.field textarea {
   font: inherit;
   font-weight: 400;
   padding: 9px 12px;
@@ -358,6 +378,70 @@ select {
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
+}
+
+/* ===== Reviews pop-up ===== */
+
+/* The heading gets focus only so the pop-up opens at the top */
+.dialog-title:focus { outline: none; }
+
+.review-summary { margin: 0 0 8px; font-weight: 600; }
+.review-summary:empty { display: none; }
+
+/* Long lists scroll on their own, so the form stays close */
+.review-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.review-list:empty { display: none; }
+.review-list li { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.review-list li:last-child { border-bottom: 0; }
+
+.review-author { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.review-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.review-date { color: var(--muted); font-size: 0.85rem; }
+.review-text { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+
+.review-form { padding-top: 14px; border-top: 1px solid var(--border); }
+.review-form-title { margin: 0 0 8px; color: var(--teal); font-weight: 800; font-size: 1.1rem; }
+
+.rating-field { margin: 0 0 6px; padding: 0; border: 0; }
+.rating-field legend { padding: 0; font-weight: 600; }
+.rating-field .field-error { display: block; }
+
+.star-picker { display: flex; width: max-content; }
+
+.star {
+  position: relative;
+  padding: 0 3px;
+  color: var(--border);
+  font-size: 1.9rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+/* The real radio button stays for keyboards and screen readers, but is invisible */
+.star input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+
+/* Color the chosen star and every star before it, and the same while hovering */
+.star:has(input:checked),
+.star:has(~ .star input:checked),
+.star:hover,
+.star:has(~ .star:hover) { color: var(--gold); }
+
+.star:has(input:focus-visible) { outline: 3px solid var(--gold); outline-offset: -2px; border-radius: 6px; }
+
+.review-saved {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--teal-light);
+  color: var(--success);
+  font-weight: 600;
 }
 
 /* ===== Phones ===== */

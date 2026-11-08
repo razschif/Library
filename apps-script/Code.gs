@@ -6,6 +6,8 @@
  *
  * The website talks to this script in two ways:
  *   GET  ...?action=counts       -> how many people chose each book (no names, no IDs)
+ *   GET  ...?action=reviews      -> each book's reviews with the writer's name and מחזור (never personal numbers)
+ *   POST {action: "review", ...} -> save a person's rating and review of a book
  *   POST {action: "add", ...}    -> add a book to a person's choices
  *   POST {action: "remove", ...} -> remove a book from a person's choices
  *   POST {action: "mine", ...}   -> list the book ids a person chose
@@ -35,6 +37,16 @@ var COL_BOOK_ID = 2;
 var COL_NAME = 4;
 var COL_PERSONAL_ID = 5;
 
+// Reviews are saved in their own sheet tab. The first columns match the choices tab.
+var REVIEWS_SHEET_NAME = 'ביקורות';
+var MAX_REVIEW_LENGTH = 1000;      // characters
+var COHORTS = ['כ', 'כ"א', 'כ"ב', 'סגל']; // the מחזור options (keep the same as index.html)
+var REVIEW_HEADERS = ['זמן', 'מספר ספר', 'שם הספר', 'שם מלא', 'מספר אישי', 'דירוג', 'ביקורת', 'מחזור'];
+var COL_TIME = 1;
+var COL_RATING = 6;
+var COL_REVIEW_TEXT = 7;
+var COL_COHORT = 8;
+
 // ---------------------------------------------------------------------------
 // Entry points (Google calls these automatically)
 // ---------------------------------------------------------------------------
@@ -45,10 +57,13 @@ function doGet(e) {
   if (action === 'counts') {
     return jsonResponse({ ok: true, counts: countChoicesPerBook() });
   }
+  if (action === 'reviews') {
+    return jsonResponse({ ok: true, reviews: getPublicReviews() });
+  }
   return jsonResponse({ ok: false, error: 'בקשה לא מוכרת.' });
 }
 
-/** Handles POST requests (add / remove / mine). */
+/** Handles POST requests (add / remove / mine / review). */
 function doPost(e) {
   var request;
   try {
@@ -69,10 +84,22 @@ function doPost(e) {
   if (request.action === 'mine') {
     return jsonResponse(getChoicesOf(name, personalId));
   }
-  if (request.action === 'add' || request.action === 'remove') {
+  if (request.action === 'add' || request.action === 'remove' || request.action === 'review') {
     var bookId = String(request.bookId);
     if (!BOOK_TITLES.hasOwnProperty(bookId)) {
       return jsonResponse({ ok: false, error: 'הספר לא נמצא ברשימה. רעננו את הדף ונסו שוב.' });
+    }
+    if (request.action === 'review') {
+      var rating = Number(request.rating);
+      var text = normalizeReviewText(request.text);
+      var cohort = String(request.cohort || '');
+      var reviewError = getRatingError(rating) || getReviewTextError(text) || getCohortError(cohort);
+      if (reviewError) {
+        return jsonResponse({ ok: false, error: reviewError });
+      }
+      return jsonResponse(withLock(function () {
+        return saveReview(bookId, name, personalId, rating, text, cohort);
+      }));
     }
     // Only one add/remove runs at a time, so two requests can't break the rules together.
     return jsonResponse(withLock(function () {
@@ -92,7 +119,7 @@ function doPost(e) {
 function saveChoice(bookId, name, personalId) {
   var rows = rowsOfPerson(personalId);
 
-  var nameError = checkSameName(rows, name);
+  var nameError = checkSameName(rows.concat(reviewsOfPerson(personalId)), name);
   if (nameError) return { ok: false, error: nameError };
 
   var alreadyChosen = rows.some(function (row) { return row.bookId === bookId; });
@@ -117,7 +144,7 @@ function saveChoice(bookId, name, personalId) {
 function deleteChoice(bookId, name, personalId) {
   var rows = rowsOfPerson(personalId);
 
-  var nameError = checkSameName(rows, name);
+  var nameError = checkSameName(rows.concat(reviewsOfPerson(personalId)), name);
   if (nameError) return { ok: false, error: nameError };
 
   var match = rows.filter(function (row) { return row.bookId === bookId; })[0];
@@ -131,7 +158,7 @@ function deleteChoice(bookId, name, personalId) {
 /** Returns the book ids that this person chose. */
 function getChoicesOf(name, personalId) {
   var rows = rowsOfPerson(personalId);
-  var nameError = checkSameName(rows, name);
+  var nameError = checkSameName(rows.concat(reviewsOfPerson(personalId)), name);
   if (nameError) return { ok: false, error: nameError };
   return { ok: true, bookIds: rows.map(function (row) { return Number(row.bookId); }) };
 }
@@ -143,6 +170,44 @@ function countChoicesPerBook() {
     counts[row.bookId] = (counts[row.bookId] || 0) + 1;
   });
   return counts;
+}
+
+/** Saves this person's review of a book. A second review replaces the first. */
+function saveReview(bookId, name, personalId, rating, text, cohort) {
+  var reviews = reviewsOfPerson(personalId);
+
+  var nameError = checkSameName(rowsOfPerson(personalId).concat(reviews), name);
+  if (nameError) return { ok: false, error: nameError };
+
+  var existing = reviews.filter(function (row) { return row.bookId === bookId; })[0];
+  var sheet = getOrCreateSheet(REVIEWS_SHEET_NAME, REVIEW_HEADERS);
+  var rowNumber = existing ? existing.rowNumber : sheet.getLastRow() + 1;
+  var range = sheet.getRange(rowNumber, 1, 1, REVIEW_HEADERS.length);
+  range.setNumberFormat('@'); // text only, so a review starting with "=" is never run as a formula
+  range.setValues([[new Date().toISOString(), bookId, BOOK_TITLES[bookId], name, personalId, String(rating), text, cohort]]);
+  return { ok: true, updated: Boolean(existing) };
+}
+
+/**
+ * Returns {bookId: [{rating, text, date, name, cohort}, ...]}, newest first.
+ * Never includes personal numbers. Reviews with no מחזור were written when
+ * reviews were promised to be anonymous, so their names stay hidden.
+ */
+function getPublicReviews() {
+  var reviews = {};
+  readAllReviews()
+    .sort(function (a, b) { return a.date < b.date ? 1 : -1; })
+    .forEach(function (row) {
+      if (!reviews[row.bookId]) reviews[row.bookId] = [];
+      reviews[row.bookId].push({
+        rating: row.rating,
+        text: row.text,
+        date: row.date,
+        name: row.cohort ? row.name : '',
+        cohort: row.cohort
+      });
+    });
+  return reviews;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +238,26 @@ function getPersonalIdError(personalId) {
   return '';
 }
 
+/** Returns the review text with unified line breaks and no spaces around it. */
+function normalizeReviewText(text) {
+  return String(text || '').replace(/\r\n?/g, '\n').trim();
+}
+
+/** Returns an error message, or '' if the rating is a whole number from 1 to 5. */
+function getRatingError(rating) {
+  return [1, 2, 3, 4, 5].indexOf(rating) === -1 ? 'יש לבחור דירוג של 1 עד 5 כוכבים.' : '';
+}
+
+/** Returns an error message, or '' if the review text is OK. It may be empty. */
+function getReviewTextError(text) {
+  return text.length > MAX_REVIEW_LENGTH ? 'הביקורת ארוכה מדי.' : '';
+}
+
+/** Returns an error message, or '' if the מחזור is one of the options. */
+function getCohortError(cohort) {
+  return COHORTS.indexOf(cohort) === -1 ? 'יש לבחור מחזור.' : '';
+}
+
 /**
  * A personal number must always come with the same name.
  * This stops someone from seeing or changing another person's choices
@@ -192,14 +277,43 @@ function checkSameName(rows, name) {
 
 /** Returns the "בחירות" sheet tab, creating it (with headers) if needed. */
 function getSheet() {
+  return getOrCreateSheet(SHEET_NAME, HEADERS);
+}
+
+/** Returns a sheet tab by name, creating it (with headers) if needed. */
+function getOrCreateSheet(sheetName, headers) {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = spreadsheet.getSheetByName(SHEET_NAME);
+  var sheet = spreadsheet.getSheetByName(sheetName);
   if (!sheet) {
-    sheet = spreadsheet.insertSheet(SHEET_NAME);
-    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    sheet = spreadsheet.insertSheet(sheetName);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+/** Reads every review row. Doesn't create the tab, so reading stays safe without the lock. */
+function readAllReviews() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(REVIEWS_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, REVIEW_HEADERS.length).getDisplayValues();
+  return values.map(function (cells, index) {
+    return {
+      rowNumber: index + 2,
+      date: String(cells[COL_TIME - 1]),
+      bookId: String(cells[COL_BOOK_ID - 1]),
+      name: normalizeName(cells[COL_NAME - 1]),
+      personalId: String(cells[COL_PERSONAL_ID - 1]),
+      rating: Number(cells[COL_RATING - 1]),
+      text: String(cells[COL_REVIEW_TEXT - 1]),
+      cohort: String(cells[COL_COHORT - 1])
+    };
+  });
+}
+
+/** Returns only the reviews written with one personal number. */
+function reviewsOfPerson(personalId) {
+  return readAllReviews().filter(function (row) { return row.personalId === personalId; });
 }
 
 /** Reads every choice row as {rowNumber, bookId, name, personalId}. */

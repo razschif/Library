@@ -6,6 +6,8 @@
  *   removeChoice(bookId, name, id)  -> remove a book from a person's choices
  *   getMyChoices(name, id)          -> the book ids a person chose
  *   getBookCounts()                 -> {bookId: number of people}, no personal details
+ *   submitReview(bookId, name, id, rating, text, cohort) -> save (or replace) a person's review
+ *   getReviews()                    -> {bookId: [{rating, text, date, name, cohort}]}, no personal numbers
  *   isDemoMode()                    -> true if no server is connected yet
  *
  * Every function returns a Promise of an object:
@@ -16,6 +18,8 @@
  *
  * PRIVACY: names and personal numbers are only sent to the server.
  * This file never logs them, never shows them and never saves them in the browser.
+ * The one public exception: a review is published with its writer's name and
+ * מחזור. Personal numbers are never published.
  */
 
 // Paste the Google Apps Script web app URL here (it ends with /exec).
@@ -48,19 +52,34 @@ function getMyChoices(name, id) {
   return postToServer({ action: "mine", name, id });
 }
 
-async function getBookCounts() {
+function getBookCounts() {
   if (isDemoMode()) return demoServer.counts();
-  try {
-    const response = await fetch(API_URL + "?action=counts");
-    return await response.json();
-  } catch (error) {
-    return { ok: false, error: NETWORK_ERROR };
-  }
+  return getFromServer("counts");
+}
+
+function submitReview(bookId, name, id, rating, text, cohort) {
+  if (isDemoMode()) return demoServer.review(bookId, name, id, rating, text, cohort);
+  return postToServer({ action: "review", bookId, name, id, rating, text, cohort });
+}
+
+function getReviews() {
+  if (isDemoMode()) return demoServer.reviews();
+  return getFromServer("reviews");
 }
 
 // ---------------------------------------------------------------------------
 // Talking to Google Apps Script
 // ---------------------------------------------------------------------------
+
+/** Asks the server for public information (never personal details). */
+async function getFromServer(action) {
+  try {
+    const response = await fetch(`${API_URL}?action=${action}`);
+    return await response.json();
+  } catch (error) {
+    return { ok: false, error: NETWORK_ERROR };
+  }
+}
 
 /*
  * Sends data to the server with POST.
@@ -88,13 +107,14 @@ async function postToServer(data) {
 
 const demoServer = (() => {
   const people = new Map(); // personal id -> {name, bookIds: Set}
+  const reviewers = new Map(); // personal id -> {name, byBook: Map(bookId -> review)}
 
   // Wait a little, like a real network request would.
   const answer = (result) => new Promise((resolve) => setTimeout(() => resolve(result), 300));
   const cleanName = (name) => String(name).replace(/\s+/g, " ").trim();
 
   function checkPerson(name, id) {
-    const person = people.get(id);
+    const person = people.get(id) || reviewers.get(id);
     if (person && person.name !== cleanName(name)) {
       return "השם לא תואם לשם שנרשם עם המספר האישי הזה. יש להקליד את השם בדיוק כמו בפעם הראשונה.";
     }
@@ -135,6 +155,33 @@ const demoServer = (() => {
         for (const bookId of person.bookIds) counts[bookId] = (counts[bookId] || 0) + 1;
       }
       return answer({ ok: true, counts });
+    },
+    review(bookId, name, id, rating, text, cohort) {
+      const error = checkPerson(name, id);
+      if (error) return answer({ ok: false, error });
+      if (![1, 2, 3, 4, 5].includes(rating)) {
+        return answer({ ok: false, error: "יש לבחור דירוג של 1 עד 5 כוכבים." });
+      }
+      if (!['כ', 'כ"א', 'כ"ב', 'סגל'].includes(cohort)) {
+        return answer({ ok: false, error: "יש לבחור מחזור." });
+      }
+      const reviewer = reviewers.get(id) || { name: cleanName(name), byBook: new Map() };
+      const updated = reviewer.byBook.has(bookId);
+      reviewer.byBook.set(bookId, {
+        rating, text: text.trim(), date: new Date().toISOString(), name: reviewer.name, cohort,
+      });
+      reviewers.set(id, reviewer);
+      return answer({ ok: true, updated });
+    },
+    reviews() {
+      const all = [];
+      for (const reviewer of reviewers.values()) {
+        for (const [bookId, review] of reviewer.byBook) all.push({ bookId, review });
+      }
+      all.sort((a, b) => (a.review.date < b.review.date ? 1 : -1));
+      const reviews = {};
+      for (const { bookId, review } of all) (reviews[bookId] = reviews[bookId] || []).push(review);
+      return answer({ ok: true, reviews });
     },
   };
 })();

@@ -1,13 +1,15 @@
 /*
  * script.js - everything the page does: loading the books, filters, sorting,
- * the book cards and the two pop-ups.
+ * the book cards and the pop-ups.
  *
  * Talking to the server happens ONLY through api.js:
- *   submitChoice, removeChoice, getMyChoices, getBookCounts, isDemoMode
+ *   submitChoice, removeChoice, getMyChoices, getBookCounts,
+ *   submitReview, getReviews, isDemoMode
  *
  * PRIVACY: names and personal numbers are read from the form, sent to api.js
  * and then cleared. They are never printed to the console, shown on the page
- * or saved in the browser.
+ * or saved in the browser. The one exception: a review is shown with its
+ * writer's name and מחזור. Personal numbers are never shown.
  */
 
 // ---------------------------------------------------------------------------
@@ -18,6 +20,7 @@ const BOOKS_FILE = "books.json";
 const YEAR_LABELS = { 1: "שנה א'", 2: "שנה ב'", 3: "שנה ג'" };
 const MAX_PERSON_ICONS = 5; // how many little person icons to show on a card
 const SHOW_BOOK_COVERS = false; // set to false to hide all book covers
+const MAX_STARS = 5;
 
 // Compares Hebrew (and English) text the way a Hebrew reader expects.
 const hebrewCollator = new Intl.Collator("he", { sensitivity: "base", numeric: true });
@@ -25,6 +28,9 @@ const hebrewCollator = new Intl.Collator("he", { sensitivity: "base", numeric: t
 let allBooks = [];      // every book from books.json
 let bookCounts = {};    // {bookId: how many people chose it}
 let currentBook = null; // the book whose "choose" pop-up is open
+let bookReviews = {};   // {bookId: [{rating, text, date, name, cohort}], newest first}
+let reviewsLoaded = false; // false until the reviews arrive from the server
+let reviewBook = null;  // the book whose reviews pop-up is open
 
 // Shortcut for finding elements by id.
 const $ = (id) => document.getElementById(id);
@@ -40,6 +46,7 @@ async function init() {
   setUpControls();
   setUpChooseDialog();
   setUpMineDialog();
+  setUpReviewDialog();
 
   try {
     allBooks = await loadBooks();
@@ -50,6 +57,7 @@ async function init() {
   fillSubjectOptions(allBooks);
   renderBooks();
   refreshCounts();
+  refreshReviews();
 }
 
 /** Downloads books.json and returns the list of books. */
@@ -161,7 +169,9 @@ function createBookCard(book) {
   fillLink(find(".book-link"), book.link);
   fillCover(find(".book-cover"), book, card);
   fillCount(find(".book-count"), bookCounts[book.id] || 0);
+  fillRating(find(".book-rating"), book.id);
   find(".choose-btn").addEventListener("click", () => openChooseDialog(book));
+  find(".reviews-btn").addEventListener("click", () => openReviewDialog(book));
   return card;
 }
 
@@ -228,6 +238,62 @@ async function refreshCounts() {
   for (const card of document.querySelectorAll(".book-card")) {
     fillCount(card.querySelector(".book-count"), bookCounts[card.dataset.bookId] || 0);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Ratings on the cards
+// ---------------------------------------------------------------------------
+
+/** Downloads the latest reviews and updates the cards and the open pop-up. */
+async function refreshReviews() {
+  const result = await getReviews();
+  if (!result.ok) return; // reviews are a nice extra; the site works without them
+  bookReviews = result.reviews || {};
+  reviewsLoaded = true;
+  for (const card of document.querySelectorAll(".book-card")) {
+    fillRating(card.querySelector(".book-rating"), card.dataset.bookId);
+  }
+  if (reviewBook) showReviews(reviewBook);
+}
+
+/** Returns the average rating with one decimal, e.g. "4.5". */
+function averageRating(reviews) {
+  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
+  return (total / reviews.length).toFixed(1);
+}
+
+/** "דירוג אחד" or "3 דירוגים" */
+function ratingCountText(count) {
+  return count === 1 ? "דירוג אחד" : `${count} דירוגים`;
+}
+
+/** Draws filled and empty stars for a rating (rounded to a whole star). */
+function createStars(rating) {
+  const filledCount = Math.round(rating);
+  const stars = document.createElement("span");
+  stars.className = "stars";
+  stars.setAttribute("role", "img");
+  stars.setAttribute("aria-label", `${rating} מתוך ${MAX_STARS} כוכבים`);
+  const empty = document.createElement("span");
+  empty.className = "stars-empty";
+  empty.textContent = "★".repeat(MAX_STARS - filledCount);
+  stars.append("★".repeat(filledCount), empty);
+  return stars;
+}
+
+/** Puts the stars, the average and the number of ratings into an element. */
+function fillRatingSummary(element, reviews) {
+  element.append(createStars(averageRating(reviews)),
+    document.createTextNode(` ${averageRating(reviews)} (${ratingCountText(reviews.length)})`));
+}
+
+/** Shows a book's average rating on its card. */
+function fillRating(element, bookId) {
+  element.replaceChildren();
+  if (!reviewsLoaded) return;
+  const reviews = bookReviews[bookId] || [];
+  if (reviews.length === 0) element.textContent = "עוד לא דורג";
+  else fillRatingSummary(element, reviews);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +435,129 @@ function resetChooseDialog() {
   $("choose-form").hidden = false;
   $("choose-success").hidden = true;
   currentBook = null;
+}
+
+// ---------------------------------------------------------------------------
+// Pop-up: rating and reviews
+// ---------------------------------------------------------------------------
+
+function setUpReviewDialog() {
+  const dialog = $("review-dialog");
+  setUpCloseButtons(dialog);
+  clearErrorWhileTyping("review");
+  $("review-form").addEventListener("submit", handleReviewSubmit);
+  $("review-form").addEventListener("change", (event) => {
+    if (event.target.name === "rating") $("review-rating-error").textContent = "";
+    if (event.target.id === "review-cohort") showFieldError(event.target, $("review-cohort-error"), "");
+  });
+  dialog.addEventListener("close", () => { if (!dialog.open) resetReviewDialog(); });
+}
+
+function openReviewDialog(book) {
+  resetReviewDialog();
+  reviewBook = book;
+  $("review-book-title").textContent = book.title;
+  showReviews(book);
+  $("review-dialog").showModal();
+  $("review-heading").focus(); // start at the top, so the reviews are seen first
+}
+
+/** Draws the average and the list of reviews of one book. */
+function showReviews(book) {
+  const reviews = bookReviews[book.id] || [];
+  $("review-summary").replaceChildren();
+  if (reviews.length > 0) fillRatingSummary($("review-summary"), reviews);
+  $("review-list").replaceChildren(...reviews.map(createReviewItem));
+  $("review-empty").textContent = reviewsLoaded
+    ? "עדיין אין ביקורות על הספר הזה."
+    : "הביקורות עדיין לא נטענו.";
+  $("review-empty").hidden = reviews.length > 0;
+}
+
+function createReviewItem(review) {
+  const item = document.createElement("li");
+  if (review.name) {
+    const author = document.createElement("p");
+    author.className = "review-author";
+    author.textContent = `${review.name} · ${cohortLabel(review.cohort)}`;
+    item.append(author);
+  }
+
+  const header = document.createElement("div");
+  header.className = "review-header";
+  const date = document.createElement("span");
+  date.className = "review-date";
+  date.textContent = new Date(review.date).toLocaleDateString("he-IL");
+  header.append(createStars(review.rating), date);
+  item.append(header);
+
+  if (review.text) {
+    const text = document.createElement("p");
+    text.className = "review-text";
+    text.dir = "auto";
+    text.textContent = review.text;
+    item.append(text);
+  }
+  return item;
+}
+
+/** 'כ"א' -> 'מחזור כ"א', but staff are just "סגל". */
+function cohortLabel(cohort) {
+  return cohort === "סגל" ? cohort : `מחזור ${cohort}`;
+}
+
+async function handleReviewSubmit(event) {
+  event.preventDefault();
+  showFormError($("review-error"), "");
+
+  const checkedStar = $("review-form").querySelector("input[name=rating]:checked");
+  $("review-rating-error").textContent = checkedStar ? "" : "יש לבחור דירוג.";
+  const identityOk = validateIdentityFields("review");
+  const cohortInput = $("review-cohort");
+  const cohortOk = showFieldError(cohortInput, $("review-cohort-error"), cohortInput.value ? "" : "יש לבחור מחזור.");
+  if (identityOk && !cohortOk) cohortInput.focus();
+  if (!checkedStar || !identityOk || !cohortOk) return;
+
+  const book = reviewBook;
+  const button = $("review-submit");
+  setBusy(button, true, "שומר…");
+  const result = await submitReview(
+    book.id,
+    cleanName($("review-name").value),
+    cleanPersonalId($("review-id").value),
+    Number(checkedStar.value),
+    $("review-text").value,
+    cohortInput.value
+  );
+  setBusy(button, false);
+
+  // The pop-up may have been closed, or opened on another book, while waiting.
+  if (reviewBook === book) {
+    if (result.ok) showReviewSaved(result.updated);
+    else showFormError($("review-error"), result.error || "אירעה שגיאה. נסו שוב.");
+  }
+  if (result.ok) refreshReviews();
+}
+
+function showReviewSaved(updated) {
+  $("review-form").reset(); // forget the name and number right away
+  $("review-saved-message").textContent = updated ? "הביקורת שלך עודכנה. תודה!" : "הביקורת נשמרה. תודה!";
+  $("review-form").hidden = true;
+  $("review-success").hidden = false;
+  $("review-success").querySelector("button").focus();
+}
+
+/** Runs every time the pop-up closes: back to an empty form. */
+function resetReviewDialog() {
+  $("review-form").reset();
+  for (const field of ["name", "id", "cohort"]) {
+    showFieldError($(`review-${field}`), $(`review-${field}-error`), "");
+  }
+  $("review-rating-error").textContent = "";
+  showFormError($("review-error"), "");
+  $("review-form").hidden = false;
+  $("review-success").hidden = true;
+  reviewBook = null;
 }
 
 // ---------------------------------------------------------------------------

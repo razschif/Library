@@ -84,7 +84,16 @@ To control whether covers are shown, change `SHOW_BOOK_COVERS` near the top of
 option.
 
 **Privacy:** the sheet holds names and personal numbers. Share it only with
-the staff who need it. The website itself never shows, logs or saves them.
+the staff who need it. The website never shows, logs or saves personal
+numbers, and shows names only next to reviews (see below).
+
+**Ratings and reviews** are saved in a tab called **ביקורות**, created with the
+first review. Each person has one review per book; sending another replaces
+it. The site shows the stars, text, date, writer's full name and מחזור to
+everyone, but never the personal number. Reviews with an empty מחזור column
+show no name. To take a review down, delete its row in the sheet. The מחזור
+options are listed in `index.html` and in `COHORTS` at the top of `Code.gs`
+(and in the demo server in `api.js`); keep them the same.
 
 ---
 

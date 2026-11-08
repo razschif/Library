@@ -81,6 +81,10 @@
         <ul class="book-years" aria-label="שנים רלוונטיות"></ul>
         <p class="book-description" dir="auto"></p>
         <a class="book-link" target="_blank" rel="noopener" hidden>לעיון בספר</a>
+        <div class="book-rating-row">
+          <p class="book-rating"></p>
+          <button type="button" class="btn btn-secondary btn-small reviews-btn">דירוג וביקורות</button>
+        </div>
         <div class="book-footer">
           <button type="button" class="btn btn-primary choose-btn">בחירת ספר זה</button>
           <p class="book-count"></p>
@@ -163,6 +167,81 @@
     </div>
 
     <p class="form-error" id="mine-error" role="alert" hidden></p>
+  </dialog>
+
+  <!-- ===== Pop-up: rating and reviews of a book ===== -->
+  <dialog id="review-dialog" class="dialog" aria-labelledby="review-heading">
+    <h2 id="review-heading" class="dialog-title" tabindex="-1">דירוג וביקורות</h2>
+    <p class="dialog-book" dir="auto" id="review-book-title"></p>
+
+    <!-- What readers wrote, with their name and מחזור -->
+    <p class="review-summary" id="review-summary"></p>
+    <ul id="review-list" class="review-list"></ul>
+    <p id="review-empty" class="hint" hidden></p>
+
+    <!-- Step 1: the form -->
+    <form id="review-form" class="review-form" novalidate>
+      <h3 class="review-form-title">הדירוג שלך</h3>
+
+      <fieldset class="rating-field">
+        <legend>דירוג</legend>
+        <div class="star-picker">
+          <label class="star"><input type="radio" name="rating" value="1" aria-label="כוכב אחד"><span aria-hidden="true">★</span></label>
+          <label class="star"><input type="radio" name="rating" value="2" aria-label="2 כוכבים"><span aria-hidden="true">★</span></label>
+          <label class="star"><input type="radio" name="rating" value="3" aria-label="3 כוכבים"><span aria-hidden="true">★</span></label>
+          <label class="star"><input type="radio" name="rating" value="4" aria-label="4 כוכבים"><span aria-hidden="true">★</span></label>
+          <label class="star"><input type="radio" name="rating" value="5" aria-label="5 כוכבים"><span aria-hidden="true">★</span></label>
+        </div>
+        <span class="field-error" id="review-rating-error" aria-live="polite"></span>
+      </fieldset>
+
+      <label class="field">
+        <span>ביקורת (לא חובה)</span>
+        <textarea id="review-text" rows="3" maxlength="1000" dir="auto"></textarea>
+      </label>
+
+      <label class="field">
+        <span>שם מלא</span>
+        <input type="text" id="review-name" maxlength="60" autocomplete="off" required>
+        <span class="field-error" id="review-name-error" aria-live="polite"></span>
+      </label>
+
+      <label class="field">
+        <span>מספר אישי</span>
+        <input type="text" id="review-id" dir="ltr" inputmode="numeric"
+               autocomplete="off" placeholder="7 ספרות" required>
+        <span class="field-error" id="review-id-error" aria-live="polite"></span>
+      </label>
+
+      <label class="field">
+        <span>מחזור</span>
+        <select id="review-cohort" required>
+          <option value="">בחירת מחזור</option>
+          <option value="כ">כ</option>
+          <option value='כ"א'>כ"א</option>
+          <option value='כ"ב'>כ"ב</option>
+          <option value="סגל">סגל</option>
+        </select>
+        <span class="field-error" id="review-cohort-error" aria-live="polite"></span>
+      </label>
+
+      <p class="hint">הביקורת תוצג לכולם עם השם והמחזור שלך. המספר האישי לא יוצג. ביקורת נוספת שלך על אותו ספר תחליף את הקודמת.</p>
+
+      <p class="form-error" id="review-error" role="alert" hidden></p>
+
+      <div class="dialog-buttons">
+        <button type="submit" class="btn btn-primary" id="review-submit">שליחה</button>
+        <button type="button" class="btn btn-secondary" data-close>ביטול</button>
+      </div>
+    </form>
+
+    <!-- Step 2: saved -->
+    <div id="review-success" hidden>
+      <p class="review-saved" id="review-saved-message" role="status"></p>
+      <div class="dialog-buttons">
+        <button type="button" class="btn btn-primary" data-close>סגירה</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- api.js must load first: script.js uses its functions -->
