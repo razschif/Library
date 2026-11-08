@@ -14,6 +14,7 @@
 | `convert.py` | Turns `books.xlsx` into `books.json` and `apps-script/Books.gs` |
 | `apps-script/Code.gs` | The server code (Google Apps Script) |
 | `apps-script/Books.gs` | List of valid book ids for the server. Created by `convert.py` |
+| `apps-script/DummyData.gs` | Optional. Adds or removes sample reviews and choices for trying out the site |
 
 ---
 
