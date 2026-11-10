@@ -133,7 +133,7 @@ function saveChoice(bookId, name, personalId) {
   }
 
   var sheet = getSheet();
-  var newRow = sheet.getLastRow() + 1;
+  var newRow = nextFreeRow(sheet, 1);
   var range = sheet.getRange(newRow, 1, 1, HEADERS.length);
   range.setNumberFormat('@'); // save everything as text, so "0123456" keeps its leading 0
   range.setValues([[new Date().toISOString(), bookId, BOOK_TITLES[bookId], name, personalId]]);
@@ -181,7 +181,7 @@ function saveReview(bookId, name, personalId, rating, text, cohort) {
 
   var existing = reviews.filter(function (row) { return row.bookId === bookId; })[0];
   var sheet = getOrCreateSheet(REVIEWS_SHEET_NAME, REVIEW_HEADERS);
-  var rowNumber = existing ? existing.rowNumber : sheet.getLastRow() + 1;
+  var rowNumber = existing ? existing.rowNumber : nextFreeRow(sheet, 1);
   var range = sheet.getRange(rowNumber, 1, 1, REVIEW_HEADERS.length);
   range.setNumberFormat('@'); // text only, so a review starting with "=" is never run as a formula
   range.setValues([[new Date().toISOString(), bookId, BOOK_TITLES[bookId], name, personalId, String(rating), text, cohort]]);
@@ -290,6 +290,17 @@ function getOrCreateSheet(sheetName, headers) {
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+/**
+ * Returns the first empty row, adding rows if the tab is too short for `count`
+ * more. Writing past the end of a tab fails, and imported tabs have no spare rows.
+ */
+function nextFreeRow(sheet, count) {
+  var firstRow = sheet.getLastRow() + 1;
+  var missing = firstRow + count - 1 - sheet.getMaxRows();
+  if (missing > 0) sheet.insertRowsAfter(sheet.getMaxRows(), missing);
+  return firstRow;
 }
 
 /** Reads every review row. Doesn't create the tab, so reading stays safe without the lock. */

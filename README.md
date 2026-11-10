@@ -147,5 +147,5 @@ Books/          (the digital copies – about 160 MB; one PDF is 83 MB)
 covers/
 ```
 
-**Don't upload:** `books.xlsx`, `convert.py`, `apps-script/`, `README.md`,
-`presentation.pptx`, `main.html`.
+**Don't upload:** `books.xlsx`, `dummy-data.xlsx`, `convert.py`, `apps-script/`,
+`README.md`, `presentation.pptx`, `main.html`.

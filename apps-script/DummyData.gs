@@ -94,7 +94,7 @@ function buildDummyRows() {
 }
 
 function appendDummyRows(sheet, rows) {
-  var range = sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length);
+  var range = sheet.getRange(nextFreeRow(sheet, rows.length), 1, rows.length, rows[0].length);
   range.setNumberFormat('@'); // keeps the leading zeros of the personal numbers
   range.setValues(rows);
 }
@@ -115,6 +115,7 @@ function removeDummyRows() {
 
 /** Deletes from the bottom up, so the remaining row numbers stay correct. */
 function deleteRows(sheet, rows) {
+  if (rows.length > 0) sheet.insertRowsAfter(sheet.getMaxRows(), 1); // a tab can't lose all its rows
   rows
     .map(function (row) { return row.rowNumber; })
     .sort(function (a, b) { return b - a; })
