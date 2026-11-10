@@ -203,8 +203,21 @@ function fillYears(list, years) {
 
 function fillLink(link, url) {
   if (!url) return;
-  link.href = url;
+  link.href = toPublicBookUrl(url);
   link.hidden = false;
+}
+
+function toPublicBookUrl(url) {
+  if (!url.startsWith("Books/")) return url;
+  const host = window.location.hostname;
+  const isLocalHost = host === "localhost" || host === "127.0.0.1";
+  if (isLocalHost || window.location.protocol === "file:") return url;
+  if (!host.endsWith(".github.io")) return url;
+  const repoName = window.location.pathname.split("/").filter(Boolean)[0];
+  if (!repoName) return url;
+  const encodedPath = url.split("/").map(encodeURIComponent).join("/");
+  const owner = host.slice(0, -".github.io".length);
+  return `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodedPath}`;
 }
 
 function fillCover(img, book, card) {
