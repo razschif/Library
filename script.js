@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 const BOOKS_FILE = "books.json";
+const BOOKS_RAW_BASE_URL = "https://raw.githubusercontent.com/razschif/Library/main/";
 const YEAR_LABELS = { 1: "שנה א'", 2: "שנה ב'", 3: "שנה ג'" };
 const MAX_PERSON_ICONS = 5; // how many little person icons to show on a card
 const MAX_STARS = 5;
@@ -203,8 +204,19 @@ function fillYears(list, years) {
 
 function fillLink(link, url) {
   if (!url) return;
-  link.href = url;
+  link.href = resolveBookLink(url);
   link.hidden = false;
+}
+
+function resolveBookLink(url) {
+  if (
+    url.startsWith("Books/") &&
+    location.hostname === "razschif.github.io" &&
+    location.protocol !== "file:"
+  ) {
+    return BOOKS_RAW_BASE_URL + url;
+  }
+  return url;
 }
 
 function fillCover(img, book, card) {
