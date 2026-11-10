@@ -80,13 +80,36 @@ Version: New version → Deploy**. The URL stays the same.
 **Settings** at the top of `Code.gs`:
 - `MAX_BOOKS_PER_PERSON = 0` means no limit. Set it to `1` to allow only one book per person.
 
-To control whether covers are shown, change `SHOW_BOOK_COVERS` near the top of
-`script.js` to `true` or `false`. This is a code setting, not a user-facing
-option.
+**Admins and the control panel.** Admins log in through the small
+"כניסת מנהלים" button at the bottom of the site. The control panel shows what
+everyone chose (by person or by book, with a search box) and has the setting
+**"הצגת כריכות הספרים לכל המשתמשים"**, which turns book covers on or off for
+everyone. Covers are off until an admin turns them on.
+
+To add admins:
+1. In the Apps Script editor, choose `setUpAdminTabs` in the function list at
+   the top and click **Run** (once). It creates the tabs **מנהלים** and
+   **הגדרות** in the sheet.
+2. In the **מנהלים** tab, add one row per admin: full name, personal number
+   and a password. The name must be typed the same way the admin will type it
+   on the site.
+3. To remove an admin, delete their row. No new deployment is needed for
+   adding or removing admins.
+
+After 5 wrong logins, that personal number is blocked from the control panel
+for 15 minutes. The passwords are stored as plain text in the sheet, so anyone
+who can open the sheet can see them – give each admin a password they don't
+use anywhere else. The cover setting is saved in the **הגדרות** tab (`כן` /
+`לא`), and can also be changed there by hand.
+
+In demo mode (no server), the admin login is: name `מנהל הדגמה`, personal
+number `1234567`, password `admin`.
 
 **Privacy:** the sheet holds names and personal numbers. Share it only with
 the staff who need it. The website never shows, logs or saves personal
-numbers, and shows names only next to reviews (see below).
+numbers, and shows names only next to reviews (see below). The one exception
+is the admin control panel, which shows logged-in admins every choice with
+the person's name and personal number.
 
 **Ratings and reviews** are saved in a tab called **ביקורות**, created with the
 first review. Each person has one review per book; sending another replaces

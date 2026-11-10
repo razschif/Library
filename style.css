@@ -444,6 +444,68 @@ select {
   font-weight: 600;
 }
 
+/* ===== Footer and admin control panel ===== */
+
+.site-footer {
+  padding: 18px 0 28px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+/* A quiet text button, so the admin entry doesn't distract participants */
+.link-btn {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 4px 8px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--teal); }
+.link-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.dialog-wide { width: min(94vw, 720px); }
+
+.admin-section { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.admin-section-title { margin: 0 0 10px; color: var(--teal); font-weight: 800; font-size: 1.1rem; }
+
+.toggle { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
+.toggle input { width: 20px; height: 20px; accent-color: var(--teal); flex-shrink: 0; }
+
+.admin-save-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.admin-status { color: var(--success); font-weight: 600; font-size: 0.9rem; }
+
+.admin-choices-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.admin-choices-top .admin-section-title { margin: 0; }
+#admin-summary { margin: 6px 0 10px; }
+
+.admin-tools { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 12px; }
+.admin-tools .control { flex: 1 1 200px; }
+.admin-tools input[type="search"] {
+  font: inherit;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.admin-choices { max-height: 45vh; overflow-y: auto; }
+
+.admin-group { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.admin-group:last-child { border-bottom: 0; }
+.admin-group h4 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.admin-count { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
+.admin-subtitle { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.admin-group ul { list-style: none; margin: 4px 0 0; padding: 0; }
+.admin-group li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+
 /* ===== Phones ===== */
 
 @media (max-width: 600px) {

@@ -8,6 +8,9 @@
  *   getBookCounts()                 -> {bookId: number of people}, no personal details
  *   submitReview(bookId, name, id, rating, text, cohort) -> save (or replace) a person's review
  *   getReviews()                    -> {bookId: [{rating, text, date, name, cohort}]}, no personal numbers
+ *   getSettings()                   -> {settings: {showCovers}} - public site settings
+ *   adminGetData(name, id, password)          -> ADMINS ONLY: {settings, choices: [{date, bookId, title, name, personalId}]}
+ *   adminSaveSettings(name, id, password, settings) -> ADMINS ONLY: save settings, returns {settings}
  *   isDemoMode()                    -> true if no server is connected yet
  *
  * Every function returns a Promise of an object:
@@ -19,7 +22,8 @@
  * PRIVACY: names and personal numbers are only sent to the server.
  * This file never logs them, never shows them and never saves them in the browser.
  * The one public exception: a review is published with its writer's name and
- * מחזור. Personal numbers are never published.
+ * מחזור. Personal numbers are never published. Admins who log in to the
+ * control panel see every choice with names and personal numbers.
  */
 
 // Paste the Google Apps Script web app URL here (it ends with /exec).
@@ -67,6 +71,21 @@ function getReviews() {
   return getFromServer("reviews");
 }
 
+function getSettings() {
+  if (isDemoMode()) return demoServer.settings();
+  return getFromServer("settings");
+}
+
+function adminGetData(name, id, password) {
+  if (isDemoMode()) return demoServer.admin(name, id, password);
+  return postToServer({ action: "admin", name, id, password });
+}
+
+function adminSaveSettings(name, id, password, settings) {
+  if (isDemoMode()) return demoServer.adminSettings(name, id, password, settings);
+  return postToServer({ action: "adminSettings", name, id, password, settings });
+}
+
 // ---------------------------------------------------------------------------
 // Talking to Google Apps Script
 // ---------------------------------------------------------------------------
@@ -103,11 +122,14 @@ async function postToServer(data) {
 // Demo server (used only while API_URL is empty)
 // It follows the same rules as apps-script/Code.gs, so you can try the site
 // before the real server exists. Everything is lost when the page reloads.
+// Demo admin: name "מנהל הדגמה", personal number 1234567, password "admin".
 // ---------------------------------------------------------------------------
 
 const demoServer = (() => {
-  const people = new Map(); // personal id -> {name, bookIds: Set}
+  const people = new Map(); // personal id -> {name, bookIds: Map(bookId -> date chosen)}
   const reviewers = new Map(); // personal id -> {name, byBook: Map(bookId -> review)}
+  const settings = { showCovers: false };
+  const DEMO_ADMIN = { name: "מנהל הדגמה", id: "1234567", password: "admin" };
 
   // Wait a little, like a real network request would.
   const answer = (result) => new Promise((resolve) => setTimeout(() => resolve(result), 300));
@@ -125,11 +147,11 @@ const demoServer = (() => {
     add(bookId, name, id) {
       const error = checkPerson(name, id);
       if (error) return answer({ ok: false, error });
-      const person = people.get(id) || { name: cleanName(name), bookIds: new Set() };
+      const person = people.get(id) || { name: cleanName(name), bookIds: new Map() };
       if (person.bookIds.has(bookId)) {
         return answer({ ok: false, error: 'כבר בחרת בספר הזה. הוא מופיע ב"הבחירות שלי".' });
       }
-      person.bookIds.add(bookId);
+      person.bookIds.set(bookId, new Date().toISOString());
       people.set(id, person);
       return answer({ ok: true });
     },
@@ -147,12 +169,12 @@ const demoServer = (() => {
       const error = checkPerson(name, id);
       if (error) return answer({ ok: false, error });
       const person = people.get(id);
-      return answer({ ok: true, bookIds: person ? [...person.bookIds] : [] });
+      return answer({ ok: true, bookIds: person ? [...person.bookIds.keys()] : [] });
     },
     counts() {
       const counts = {};
       for (const person of people.values()) {
-        for (const bookId of person.bookIds) counts[bookId] = (counts[bookId] || 0) + 1;
+        for (const bookId of person.bookIds.keys()) counts[bookId] = (counts[bookId] || 0) + 1;
       }
       return answer({ ok: true, counts });
     },
@@ -182,6 +204,28 @@ const demoServer = (() => {
       const reviews = {};
       for (const { bookId, review } of all) (reviews[bookId] = reviews[bookId] || []).push(review);
       return answer({ ok: true, reviews });
+    },
+    settings() {
+      return answer({ ok: true, settings: { ...settings } });
+    },
+    admin(name, id, password) {
+      if (cleanName(name) !== DEMO_ADMIN.name || id !== DEMO_ADMIN.id || password !== DEMO_ADMIN.password) {
+        return answer({ ok: false, error: "פרטי הכניסה שגויים, או שאין לך הרשאת מנהל." });
+      }
+      const choices = [];
+      for (const [personalId, person] of people) {
+        for (const [bookId, date] of person.bookIds) {
+          choices.push({ date, bookId, title: "", name: person.name, personalId });
+        }
+      }
+      choices.sort((a, b) => (a.date < b.date ? 1 : -1));
+      return answer({ ok: true, settings: { ...settings }, choices });
+    },
+    async adminSettings(name, id, password, newSettings) {
+      const check = await this.admin(name, id, password);
+      if (!check.ok) return check;
+      if (typeof newSettings.showCovers === "boolean") settings.showCovers = newSettings.showCovers;
+      return { ok: true, settings: { ...settings } };
     },
   };
 })();

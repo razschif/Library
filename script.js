@@ -4,12 +4,15 @@
  *
  * Talking to the server happens ONLY through api.js:
  *   submitChoice, removeChoice, getMyChoices, getBookCounts,
- *   submitReview, getReviews, isDemoMode
+ *   submitReview, getReviews, getSettings, adminGetData, adminSaveSettings,
+ *   isDemoMode
  *
  * PRIVACY: names and personal numbers are read from the form, sent to api.js
  * and then cleared. They are never printed to the console, shown on the page
  * or saved in the browser. The one exception: a review is shown with its
- * writer's name and מחזור. Personal numbers are never shown.
+ * writer's name and מחזור. Personal numbers are never shown, except to a
+ * logged-in admin in the control panel. The admin's details are kept only
+ * while the panel is open.
  */
 
 // ---------------------------------------------------------------------------
@@ -19,7 +22,6 @@
 const BOOKS_FILE = "books.json";
 const YEAR_LABELS = { 1: "שנה א'", 2: "שנה ב'", 3: "שנה ג'" };
 const MAX_PERSON_ICONS = 5; // how many little person icons to show on a card
-const SHOW_BOOK_COVERS = false; // set to false to hide all book covers
 const MAX_STARS = 5;
 
 // Compares Hebrew (and English) text the way a Hebrew reader expects.
@@ -31,6 +33,7 @@ let currentBook = null; // the book whose "choose" pop-up is open
 let bookReviews = {};   // {bookId: [{rating, text, date, name, cohort}], newest first}
 let reviewsLoaded = false; // false until the reviews arrive from the server
 let reviewBook = null;  // the book whose reviews pop-up is open
+let showCovers = false; // admins turn covers on or off in the control panel
 
 // Shortcut for finding elements by id.
 const $ = (id) => document.getElementById(id);
@@ -47,6 +50,8 @@ async function init() {
   setUpChooseDialog();
   setUpMineDialog();
   setUpReviewDialog();
+  setUpAdminDialog();
+  refreshSettings(); // runs while the books load; re-draws the cards if needed
 
   try {
     allBooks = await loadBooks();
@@ -65,6 +70,19 @@ async function loadBooks() {
   const response = await fetch(BOOKS_FILE);
   if (!response.ok) throw new Error("Could not load " + BOOKS_FILE);
   return response.json();
+}
+
+/** Downloads the site settings that admins control. */
+async function refreshSettings() {
+  const result = await getSettings();
+  if (result.ok && result.settings) applySettings(result.settings);
+}
+
+/** Uses new settings, re-drawing the cards if something visible changed. */
+function applySettings(settings) {
+  const changed = Boolean(settings.showCovers) !== showCovers;
+  showCovers = Boolean(settings.showCovers);
+  if (changed && allBooks.length > 0) renderBooks();
 }
 
 function showLoadError() {
@@ -190,7 +208,7 @@ function fillLink(link, url) {
 }
 
 function fillCover(img, book, card) {
-  if (!SHOW_BOOK_COVERS || !book.cover) return;
+  if (!showCovers || !book.cover) return;
   img.src = book.cover;
   img.alt = "כריכת הספר " + book.title;
   img.hidden = false;
@@ -656,4 +674,209 @@ function resetMineDialog() {
   $("mine-list").replaceChildren();
   $("mine-form").hidden = false;
   $("mine-results").hidden = true;
+}
+
+// ---------------------------------------------------------------------------
+// Pop-up: admin login and control panel
+// ---------------------------------------------------------------------------
+
+// The admin's login details, kept only while the panel is open, so the panel
+// can save settings and refresh. Erased when the pop-up closes.
+let adminIdentity = null;
+let adminChoices = []; // every choice, from the server
+
+function setUpAdminDialog() {
+  const dialog = $("admin-dialog");
+  setUpCloseButtons(dialog);
+  clearErrorWhileTyping("admin");
+  $("admin-password").addEventListener("input", () =>
+    showFieldError($("admin-password"), $("admin-password-error"), ""));
+  $("admin-btn").addEventListener("click", () => {
+    resetAdminDialog();
+    dialog.showModal();
+    $("admin-name").focus();
+  });
+  $("admin-form").addEventListener("submit", handleAdminLogin);
+  $("admin-save-settings").addEventListener("click", handleAdminSaveSettings);
+  $("admin-show-covers").addEventListener("change", () => { $("admin-settings-status").textContent = ""; });
+  $("admin-refresh").addEventListener("click", handleAdminRefresh);
+  $("admin-search").addEventListener("input", renderAdminChoices);
+  $("admin-group").addEventListener("change", renderAdminChoices);
+  dialog.addEventListener("close", () => { if (!dialog.open) resetAdminDialog(); });
+}
+
+async function handleAdminLogin(event) {
+  event.preventDefault();
+  showFormError($("admin-error"), "");
+  const identityOk = validateIdentityFields("admin");
+  const passwordInput = $("admin-password");
+  const passwordOk = showFieldError(passwordInput, $("admin-password-error"),
+    passwordInput.value ? "" : "יש להזין סיסמה.");
+  if (identityOk && !passwordOk) passwordInput.focus();
+  if (!identityOk || !passwordOk) return;
+
+  const identity = {
+    name: cleanName($("admin-name").value),
+    id: cleanPersonalId($("admin-id").value),
+    password: passwordInput.value,
+  };
+  const button = $("admin-submit");
+  setBusy(button, true, "בודק…");
+  const result = await adminGetData(identity.name, identity.id, identity.password);
+  setBusy(button, false);
+
+  if (!result.ok) {
+    showFormError($("admin-error"), result.error || "אירעה שגיאה. נסו שוב.");
+    return;
+  }
+  adminIdentity = identity;
+  $("admin-form").reset();
+  $("admin-form").hidden = true;
+  $("admin-panel").hidden = false;
+  showAdminData(result);
+  $("admin-heading").focus();
+}
+
+/** Fills the panel with the settings and choices from the server. */
+function showAdminData(result) {
+  $("admin-show-covers").checked = Boolean(result.settings && result.settings.showCovers);
+  adminChoices = result.choices || [];
+  renderAdminChoices();
+}
+
+async function handleAdminSaveSettings() {
+  if (!adminIdentity) return;
+  showFormError($("admin-panel-error"), "");
+  $("admin-settings-status").textContent = "";
+  const button = $("admin-save-settings");
+  setBusy(button, true, "שומר…");
+  const result = await adminSaveSettings(adminIdentity.name, adminIdentity.id, adminIdentity.password,
+    { showCovers: $("admin-show-covers").checked });
+  setBusy(button, false);
+  if (!result.ok) {
+    showFormError($("admin-panel-error"), result.error || "אירעה שגיאה. נסו שוב.");
+    return;
+  }
+  $("admin-show-covers").checked = Boolean(result.settings.showCovers);
+  $("admin-settings-status").textContent = "ההגדרות נשמרו ויחולו על כל המשתמשים.";
+  applySettings(result.settings); // show the change on this page right away
+}
+
+async function handleAdminRefresh() {
+  if (!adminIdentity) return;
+  showFormError($("admin-panel-error"), "");
+  const button = $("admin-refresh");
+  setBusy(button, true, "טוען…");
+  const result = await adminGetData(adminIdentity.name, adminIdentity.id, adminIdentity.password);
+  setBusy(button, false);
+  if (!result.ok) {
+    showFormError($("admin-panel-error"), result.error || "אירעה שגיאה. נסו שוב.");
+    return;
+  }
+  showAdminData(result);
+}
+
+/** The book's current title, or the title saved with the choice if it was removed. */
+function adminBookTitle(choice) {
+  const book = allBooks.find((b) => b.id === Number(choice.bookId));
+  if (book) return book.title;
+  return choice.title || `ספר שהוסר מהרשימה (מספר ${choice.bookId})`;
+}
+
+/** Draws the choices, grouped by person or by book, filtered by the search box. */
+function renderAdminChoices() {
+  const search = $("admin-search").value.trim().toLowerCase();
+  const matches = adminChoices.filter((choice) => !search ||
+    [choice.name, choice.personalId, adminBookTitle(choice)].some((text) =>
+      String(text).toLowerCase().includes(search)));
+
+  const people = new Set(adminChoices.map((choice) => choice.personalId)).size;
+  $("admin-summary").textContent = adminChoices.length === 0 ? "" :
+    `סך הכול ${adminChoices.length} בחירות של ${people} אנשים.`;
+
+  const byPerson = $("admin-group").value === "person";
+  const groups = new Map();
+  for (const choice of matches) {
+    const key = byPerson ? choice.personalId : String(choice.bookId);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(choice);
+  }
+
+  const sections = [...groups.values()].map((choices) => {
+    const first = choices[0];
+    return {
+      title: byPerson ? first.name : adminBookTitle(first),
+      subtitle: byPerson ? `מספר אישי ${first.personalId}` : "",
+      lines: choices.map((choice) => ({
+        text: byPerson ? adminBookTitle(choice) : `${choice.name} (${choice.personalId})`,
+        date: choice.date,
+      })),
+    };
+  });
+  // People: by name. Books: most chosen first.
+  sections.sort((a, b) => byPerson
+    ? hebrewCollator.compare(a.title, b.title)
+    : b.lines.length - a.lines.length || hebrewCollator.compare(a.title, b.title));
+
+  $("admin-choices").replaceChildren(...sections.map(createAdminGroup));
+  $("admin-empty").textContent = adminChoices.length === 0
+    ? "עדיין אין בחירות."
+    : "לא נמצאו בחירות שמתאימות לחיפוש.";
+  $("admin-empty").hidden = sections.length > 0;
+}
+
+function createAdminGroup(section) {
+  const group = document.createElement("section");
+  group.className = "admin-group";
+
+  const heading = document.createElement("h4");
+  heading.dir = "auto";
+  heading.textContent = section.title;
+  const count = document.createElement("span");
+  count.className = "admin-count";
+  count.textContent = section.lines.length === 1 ? "בחירה אחת" : `${section.lines.length} בחירות`;
+  heading.append(" ", count);
+  group.append(heading);
+
+  if (section.subtitle) {
+    const subtitle = document.createElement("p");
+    subtitle.className = "admin-subtitle";
+    subtitle.textContent = section.subtitle;
+    group.append(subtitle);
+  }
+
+  const list = document.createElement("ul");
+  for (const line of section.lines) {
+    const item = document.createElement("li");
+    const text = document.createElement("span");
+    text.dir = "auto";
+    text.textContent = line.text;
+    const date = document.createElement("span");
+    date.className = "review-date";
+    const parsed = new Date(line.date);
+    date.textContent = isNaN(parsed) ? "" : parsed.toLocaleDateString("he-IL");
+    item.append(text, date);
+    list.append(item);
+  }
+  group.append(list);
+  return group;
+}
+
+/** Runs every time the pop-up closes: forget the admin and empty everything. */
+function resetAdminDialog() {
+  adminIdentity = null;
+  adminChoices = [];
+  $("admin-form").reset();
+  for (const field of ["name", "id", "password"]) {
+    showFieldError($(`admin-${field}`), $(`admin-${field}-error`), "");
+  }
+  showFormError($("admin-error"), "");
+  showFormError($("admin-panel-error"), "");
+  $("admin-settings-status").textContent = "";
+  $("admin-search").value = "";
+  $("admin-choices").replaceChildren();
+  $("admin-summary").textContent = "";
+  $("admin-empty").hidden = true;
+  $("admin-form").hidden = false;
+  $("admin-panel").hidden = true;
 }

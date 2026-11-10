@@ -11,6 +11,12 @@
  *   POST {action: "add", ...}    -> add a book to a person's choices
  *   POST {action: "remove", ...} -> remove a book from a person's choices
  *   POST {action: "mine", ...}   -> list the book ids a person chose
+ *   GET  ...?action=settings     -> the site settings (for now: show book covers or not)
+ *   POST {action: "admin", ...}         -> ADMINS ONLY: every choice, with names and personal numbers
+ *   POST {action: "adminSettings", ...} -> ADMINS ONLY: change the site settings
+ *
+ * Admins are listed in the sheet tab "מנהלים" (full name, personal number,
+ * password). Run setUpAdminTabs() once from the editor to create it.
  *
  * The rules are checked HERE, on the server, so nobody can skip them
  * by changing the website code in their browser:
@@ -47,6 +53,17 @@ var COL_RATING = 6;
 var COL_REVIEW_TEXT = 7;
 var COL_COHORT = 8;
 
+// Admins: one row per admin. Only people in this tab can open the control panel.
+var ADMINS_SHEET_NAME = 'מנהלים';
+var ADMIN_HEADERS = ['שם מלא', 'מספר אישי', 'סיסמה'];
+var MAX_ADMIN_FAILURES = 5;        // wrong logins in a row before a personal number is blocked
+var ADMIN_BLOCK_SECONDS = 15 * 60; // how long it stays blocked
+
+// Site settings that admins change from the control panel.
+var SETTINGS_SHEET_NAME = 'הגדרות';
+var SETTINGS_HEADERS = ['הגדרה', 'ערך'];
+var SETTING_SHOW_COVERS = 'הצגת כריכות';
+
 // ---------------------------------------------------------------------------
 // Entry points (Google calls these automatically)
 // ---------------------------------------------------------------------------
@@ -59,6 +76,9 @@ function doGet(e) {
   }
   if (action === 'reviews') {
     return jsonResponse({ ok: true, reviews: getPublicReviews() });
+  }
+  if (action === 'settings') {
+    return jsonResponse({ ok: true, settings: readSettings() });
   }
   return jsonResponse({ ok: false, error: 'בקשה לא מוכרת.' });
 }
@@ -79,6 +99,17 @@ function doPost(e) {
   var detailsError = getNameError(name) || getPersonalIdError(personalId);
   if (detailsError) {
     return jsonResponse({ ok: false, error: detailsError });
+  }
+
+  if (request.action === 'admin' || request.action === 'adminSettings') {
+    var adminError = checkAdmin(name, personalId, request.password);
+    if (adminError) return jsonResponse({ ok: false, error: adminError });
+    if (request.action === 'adminSettings') {
+      return jsonResponse(withLock(function () {
+        return saveSettings(request.settings || {});
+      }));
+    }
+    return jsonResponse({ ok: true, settings: readSettings(), choices: getAllChoicesForAdmin() });
   }
 
   if (request.action === 'mine') {
@@ -208,6 +239,118 @@ function getPublicReviews() {
       });
     });
   return reviews;
+}
+
+// ---------------------------------------------------------------------------
+// Admins and settings
+// ---------------------------------------------------------------------------
+
+/**
+ * Run this ONCE from the Apps Script editor (choose it in the list at the top,
+ * then click Run). It creates the "מנהלים" and "הגדרות" tabs. Then type each
+ * admin's full name, personal number and a password into "מנהלים".
+ */
+function setUpAdminTabs() {
+  var admins = getOrCreateSheet(ADMINS_SHEET_NAME, ADMIN_HEADERS);
+  admins.getRange('A:C').setNumberFormat('@'); // keeps leading zeros in personal numbers
+  getOrCreateSheet(SETTINGS_SHEET_NAME, SETTINGS_HEADERS);
+  Logger.log('Done. Add admins to the "' + ADMINS_SHEET_NAME + '" tab.');
+}
+
+/**
+ * Returns '' if this person is an admin with the right password, or an error.
+ * The error never says which detail was wrong, and after too many wrong tries
+ * the personal number is blocked for a while, so passwords can't be guessed.
+ */
+function checkAdmin(name, personalId, password) {
+  var cache = CacheService.getScriptCache();
+  var failKey = 'admin-fail-' + personalId;
+  var failures = Number(cache.get(failKey) || 0);
+  if (failures >= MAX_ADMIN_FAILURES) {
+    return 'יותר מדי ניסיונות כניסה שגויים. נסו שוב בעוד 15 דקות.';
+  }
+  password = String(password || '');
+  var match = password && readAdmins().some(function (admin) {
+    return admin.personalId === personalId && admin.name === name && admin.password === password;
+  });
+  if (!match) {
+    cache.put(failKey, String(failures + 1), ADMIN_BLOCK_SECONDS);
+    return 'פרטי הכניסה שגויים, או שאין לך הרשאת מנהל.';
+  }
+  cache.remove(failKey);
+  return '';
+}
+
+/** Reads the admins tab as [{name, personalId, password}]. */
+function readAdmins() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ADMINS_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, ADMIN_HEADERS.length).getDisplayValues()
+    .map(function (cells) {
+      var id = String(cells[1]).replace(/\s/g, '');
+      // If the cell was typed as a number, the sheet drops leading zeros. Put them back.
+      if (/^\d{1,6}$/.test(id)) id = ('0000000' + id).slice(-7);
+      return { name: normalizeName(cells[0]), personalId: id, password: String(cells[2]) };
+    })
+    .filter(function (admin) { return admin.name && admin.personalId && admin.password; });
+}
+
+/** Every choice, newest first, for the admin control panel only. */
+function getAllChoicesForAdmin() {
+  var sheet = getSheet();
+  if (sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getDisplayValues()
+    .map(function (cells) {
+      return {
+        date: String(cells[0]),
+        bookId: Number(cells[COL_BOOK_ID - 1]),
+        title: String(cells[2]),
+        name: normalizeName(cells[COL_NAME - 1]),
+        personalId: String(cells[COL_PERSONAL_ID - 1])
+      };
+    })
+    .filter(function (choice) { return choice.name; })
+    .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+}
+
+/** Returns the public site settings: {showCovers: true/false}. */
+function readSettings() {
+  var values = {};
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTINGS_SHEET_NAME);
+  if (sheet && sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getDisplayValues().forEach(function (cells) {
+      values[String(cells[0]).trim()] = String(cells[1]).trim();
+    });
+  }
+  return { showCovers: isYes(values[SETTING_SHOW_COVERS]) };
+}
+
+/** "כן", "TRUE", "1" ... count as yes. Anything else (or empty) is no. */
+function isYes(value) {
+  return ['כן', 'true', '1', 'yes', 'v', '✓'].indexOf(String(value || '').toLowerCase()) !== -1;
+}
+
+/** Saves the settings an admin changed, and returns the new settings. */
+function saveSettings(settings) {
+  if (typeof settings.showCovers === 'boolean') {
+    writeSetting(SETTING_SHOW_COVERS, settings.showCovers ? 'כן' : 'לא');
+  }
+  return { ok: true, settings: readSettings() };
+}
+
+/** Writes one setting, updating its row or adding a new one. */
+function writeSetting(key, value) {
+  var sheet = getOrCreateSheet(SETTINGS_SHEET_NAME, SETTINGS_HEADERS);
+  var rowNumber = 0;
+  if (sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues().forEach(function (cells, index) {
+      if (String(cells[0]).trim() === key) rowNumber = index + 2;
+    });
+  }
+  if (!rowNumber) rowNumber = nextFreeRow(sheet, 1);
+  var range = sheet.getRange(rowNumber, 1, 1, 2);
+  range.setNumberFormat('@');
+  range.setValues([[key, value]]);
 }
 
 // ---------------------------------------------------------------------------

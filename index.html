@@ -70,6 +70,12 @@
     <div id="book-list" class="book-list"></div>
   </main>
 
+  <footer class="site-footer">
+    <div class="container">
+      <button type="button" id="admin-btn" class="link-btn">כניסת מנהלים</button>
+    </div>
+  </footer>
+
   <!-- ===== Blueprint for one book card. script.js copies it for each book. ===== -->
   <template id="book-card-template">
     <article class="book-card">
@@ -240,6 +246,80 @@
       <p class="review-saved" id="review-saved-message" role="status"></p>
       <div class="dialog-buttons">
         <button type="button" class="btn btn-primary" data-close>סגירה</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ===== Pop-up: admin login and control panel ===== -->
+  <dialog id="admin-dialog" class="dialog dialog-wide" aria-labelledby="admin-heading">
+    <h2 id="admin-heading" class="dialog-title" tabindex="-1">לוח בקרה למנהלים</h2>
+
+    <!-- Step 1: log in -->
+    <form id="admin-form" novalidate>
+      <p class="hint">הכניסה מיועדת למנהלים שמופיעים בלשונית "מנהלים" בגיליון.</p>
+      <label class="field">
+        <span>שם מלא</span>
+        <input type="text" id="admin-name" maxlength="60" autocomplete="off" required>
+        <span class="field-error" id="admin-name-error" aria-live="polite"></span>
+      </label>
+      <label class="field">
+        <span>מספר אישי</span>
+        <input type="text" id="admin-id" dir="ltr" inputmode="numeric"
+               autocomplete="off" placeholder="7 ספרות" required>
+        <span class="field-error" id="admin-id-error" aria-live="polite"></span>
+      </label>
+      <label class="field">
+        <span>סיסמה</span>
+        <input type="password" id="admin-password" dir="ltr" autocomplete="current-password" required>
+        <span class="field-error" id="admin-password-error" aria-live="polite"></span>
+      </label>
+      <p class="form-error" id="admin-error" role="alert" hidden></p>
+      <div class="dialog-buttons">
+        <button type="submit" class="btn btn-primary" id="admin-submit">כניסה</button>
+        <button type="button" class="btn btn-secondary" data-close>ביטול</button>
+      </div>
+    </form>
+
+    <!-- Step 2: the control panel -->
+    <div id="admin-panel" hidden>
+      <section class="admin-section" aria-labelledby="admin-settings-heading">
+        <h3 id="admin-settings-heading" class="admin-section-title">הגדרות האתר</h3>
+        <label class="toggle">
+          <input type="checkbox" id="admin-show-covers">
+          <span>הצגת כריכות הספרים לכל המשתמשים</span>
+        </label>
+        <div class="admin-save-row">
+          <button type="button" class="btn btn-primary btn-small" id="admin-save-settings">שמירת הגדרות</button>
+          <span id="admin-settings-status" class="admin-status" role="status"></span>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="admin-choices-heading">
+        <div class="admin-choices-top">
+          <h3 id="admin-choices-heading" class="admin-section-title">מה כל אחד בחר</h3>
+          <button type="button" class="btn btn-secondary btn-small" id="admin-refresh">רענון</button>
+        </div>
+        <p id="admin-summary" class="hint"></p>
+        <div class="admin-tools">
+          <label class="control">
+            <span class="control-label">חיפוש</span>
+            <input type="search" id="admin-search" placeholder="שם, מספר אישי או ספר">
+          </label>
+          <label class="control">
+            <span class="control-label">תצוגה</span>
+            <select id="admin-group">
+              <option value="person">לפי אדם</option>
+              <option value="book">לפי ספר</option>
+            </select>
+          </label>
+        </div>
+        <div id="admin-choices" class="admin-choices"></div>
+        <p id="admin-empty" class="hint" hidden></p>
+      </section>
+
+      <p class="form-error" id="admin-panel-error" role="alert" hidden></p>
+      <div class="dialog-buttons">
+        <button type="button" class="btn btn-primary" data-close>יציאה</button>
       </div>
     </div>
   </dialog>
