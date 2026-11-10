@@ -12,6 +12,7 @@
 | `Books/` | Digital copies of the books (PDF / EPUB) |
 | `covers/` | Optional cover pictures |
 | `convert.py` | Turns `books.xlsx` into `books.json` and `apps-script/Books.gs` |
+| `_config.yml` | GitHub Pages config. Excludes `Books/` from the Pages artifact |
 | `apps-script/Code.gs` | The server code (Google Apps Script) |
 | `apps-script/Books.gs` | List of valid book ids for the server. Created by `convert.py` |
 | `apps-script/DummyData.gs` | Optional. Adds or removes sample reviews and choices for trying out the site |
@@ -169,6 +170,10 @@ books.json
 Books/          (the digital copies – about 160 MB; one PDF is 83 MB)
 covers/
 ```
+
+On GitHub Pages, `Books/` is excluded from the deploy artifact (see
+`_config.yml`) so deployment won't time out. The site still opens those files
+through `raw.githubusercontent.com`.
 
 **Don't upload:** `books.xlsx`, `dummy-data.xlsx`, `convert.py`, `apps-script/`,
 `README.md`, `presentation.pptx`, `main.html`.
