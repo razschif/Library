@@ -211,7 +211,7 @@ function fillLink(link, url) {
 function resolveBookLink(url) {
   if (
     url.startsWith("Books/") &&
-    location.hostname.endsWith("github.io") &&
+    location.hostname === "razschif.github.io" &&
     location.protocol !== "file:"
   ) {
     return BOOKS_RAW_BASE_URL + url;
