@@ -79,6 +79,19 @@ Version: New version → Deploy**. The URL stays the same.
 
 **Settings** at the top of `Code.gs`:
 - `MAX_BOOKS_PER_PERSON = 0` means no limit. Set it to `1` to allow only one book per person.
+- `DEPARTMENTS` lists the מחלקה options (now `1`, `2`, `3`), and
+  `COHORTS_WITHOUT_DEPARTMENT` lists the מחזורים that have no מחלקות (now `סגל`).
+
+**מחזור and מחלקה on the first choice.** The first time a person chooses a
+book, the choose form also asks for their מחזור and, except for סגל, their
+מחלקה. Later choices reuse them. They're saved in the columns **מחזור** and
+**מחלקה** of the **בחירות** tab (the headers are added by themselves the next
+time someone chooses a book) and shown in the admin control panel. People who
+chose books before this was added are asked once, on their next choice. To
+rename the מחלקות, change the options in the choose form in `index.html`
+and `DEPARTMENTS` in `Code.gs` and in the demo server in `api.js`, keeping
+them the same. If someone removes all their choices, they're asked again on
+their next choice.
 
 **Admins and the control panel.** Admins log in through the small
 "כניסת מנהלים" button at the bottom of the site. The control panel shows what

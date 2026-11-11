@@ -400,6 +400,12 @@ function setUpChooseDialog() {
   setUpCloseButtons(dialog);
   clearErrorWhileTyping("choose");
   $("choose-form").addEventListener("submit", handleChooseSubmit);
+  $("choose-cohort").addEventListener("change", () => {
+    showFieldError($("choose-cohort"), $("choose-cohort-error"), "");
+    showDepartmentField();
+  });
+  $("choose-department").addEventListener("change", () =>
+    showFieldError($("choose-department"), $("choose-department-error"), ""));
   // The "close" event arrives a moment after closing. If the pop-up was already
   // opened again by then, don't reset it.
   dialog.addEventListener("close", () => { if (!dialog.open) resetChooseDialog(); });
@@ -413,20 +419,56 @@ function openChooseDialog(book) {
   $("choose-name").focus();
 }
 
+/** סגל has no מחלקות, so the מחלקה field shows only for the other מחזורים. */
+function cohortNeedsDepartment(cohort) {
+  return cohort !== "" && cohort !== "סגל";
+}
+
+function showDepartmentField() {
+  const show = cohortNeedsDepartment($("choose-cohort").value);
+  $("choose-department-field").hidden = !show;
+  if (!show) {
+    $("choose-department").value = "";
+    showFieldError($("choose-department"), $("choose-department-error"), "");
+  }
+}
+
+/** Checks the מחזור and מחלקה fields (only when they are shown). Focuses the first wrong one. */
+function validateProfileFields() {
+  const cohort = $("choose-cohort");
+  const department = $("choose-department");
+  const cohortOk = showFieldError(cohort, $("choose-cohort-error"), cohort.value ? "" : "יש לבחור מחזור.");
+  const departmentOk = !cohortNeedsDepartment(cohort.value) ||
+    showFieldError(department, $("choose-department-error"), department.value ? "" : "יש לבחור מחלקה.");
+  if (!cohortOk) cohort.focus();
+  else if (!departmentOk) department.focus();
+  return cohortOk && departmentOk;
+}
+
 async function handleChooseSubmit(event) {
   event.preventDefault();
   showFormError($("choose-error"), "");
+  const askingProfile = !$("choose-profile").hidden;
   if (!validateIdentityFields("choose")) return;
+  if (askingProfile && !validateProfileFields()) return;
 
   const button = $("choose-submit");
   setBusy(button, true, "שומר…");
   const result = await submitChoice(
     currentBook.id,
     cleanName($("choose-name").value),
-    cleanPersonalId($("choose-id").value)
+    cleanPersonalId($("choose-id").value),
+    askingProfile ? $("choose-cohort").value : "",
+    askingProfile ? $("choose-department").value : ""
   );
   setBusy(button, false);
 
+  if (!result.ok && result.needProfile && !askingProfile) {
+    // First choice of this person: ask for the מחזור and מחלקה, then they send again.
+    $("choose-profile").hidden = false;
+    $("choose-cohort").focus();
+    return;
+  }
   if (!result.ok) {
     showFormError($("choose-error"), result.error || "אירעה שגיאה. נסו שוב.");
     return;
@@ -446,10 +488,12 @@ function showChooseSuccess() {
 /** Runs every time the pop-up closes: back to an empty form. */
 function resetChooseDialog() {
   $("choose-form").reset();
-  for (const field of ["name", "id"]) {
+  for (const field of ["name", "id", "cohort", "department"]) {
     showFieldError($(`choose-${field}`), $(`choose-${field}-error`), "");
   }
   showFormError($("choose-error"), "");
+  $("choose-profile").hidden = true;
+  $("choose-department-field").hidden = true;
   $("choose-form").hidden = false;
   $("choose-success").hidden = true;
   currentBook = null;
@@ -783,11 +827,18 @@ function adminBookTitle(choice) {
   return choice.title || `ספר שהוסר מהרשימה (מספר ${choice.bookId})`;
 }
 
+/** 'כ"א' + '2' -> 'מחזור כ"א, מחלקה 2'. '' if unknown (choices from before it was asked). */
+function profileLabel(choice) {
+  if (!choice.cohort) return "";
+  const cohort = cohortLabel(choice.cohort);
+  return choice.department ? `${cohort}, מחלקה ${choice.department}` : cohort;
+}
+
 /** Draws the choices, grouped by person or by book, filtered by the search box. */
 function renderAdminChoices() {
   const search = $("admin-search").value.trim().toLowerCase();
   const matches = adminChoices.filter((choice) => !search ||
-    [choice.name, choice.personalId, adminBookTitle(choice)].some((text) =>
+    [choice.name, choice.personalId, adminBookTitle(choice), profileLabel(choice)].some((text) =>
       String(text).toLowerCase().includes(search)));
 
   const people = new Set(adminChoices.map((choice) => choice.personalId)).size;
@@ -806,9 +857,13 @@ function renderAdminChoices() {
     const first = choices[0];
     return {
       title: byPerson ? first.name : adminBookTitle(first),
-      subtitle: byPerson ? `מספר אישי ${first.personalId}` : "",
+      subtitle: byPerson
+        ? [`מספר אישי ${first.personalId}`, profileLabel(first)].filter(Boolean).join(" · ")
+        : "",
       lines: choices.map((choice) => ({
-        text: byPerson ? adminBookTitle(choice) : `${choice.name} (${choice.personalId})`,
+        text: byPerson
+          ? adminBookTitle(choice)
+          : [`${choice.name} (${choice.personalId})`, profileLabel(choice)].filter(Boolean).join(" · "),
         date: choice.date,
       })),
     };

@@ -25,6 +25,8 @@
  *   - the same person can't choose the same book twice
  *   - a personal number always belongs to the same name
  *   - optional: a maximum number of books per person
+ *   - a person's first choice must include their מחזור, and a מחלקה too
+ *     (except סגל). Later choices reuse them.
  *
  * Every answer is JSON: {ok: true, ...} or {ok: false, error: "Hebrew message"}.
  */
@@ -38,10 +40,17 @@ var MAX_BOOKS_PER_PERSON = 0;      // 0 = no limit. For example 1 = one book per
 var LOCK_WAIT_MS = 10000;          // how long to wait for other submissions to finish
 
 // Column order in the sheet (1 = column A).
-var HEADERS = ['זמן', 'מספר ספר', 'שם הספר', 'שם מלא', 'מספר אישי'];
+var HEADERS = ['זמן', 'מספר ספר', 'שם הספר', 'שם מלא', 'מספר אישי', 'מחזור', 'מחלקה'];
 var COL_BOOK_ID = 2;
 var COL_NAME = 4;
 var COL_PERSONAL_ID = 5;
+var COL_CHOICE_COHORT = 6;
+var COL_CHOICE_DEPARTMENT = 7;
+
+// The מחלקה options (keep the same as index.html and api.js).
+// Every מחזור has these, except the ones in COHORTS_WITHOUT_DEPARTMENT.
+var DEPARTMENTS = ['1', '2', '3'];
+var COHORTS_WITHOUT_DEPARTMENT = ['סגל'];
 
 // Reviews are saved in their own sheet tab. The first columns match the choices tab.
 var REVIEWS_SHEET_NAME = 'ביקורות';
@@ -135,7 +144,7 @@ function doPost(e) {
     // Only one add/remove runs at a time, so two requests can't break the rules together.
     return jsonResponse(withLock(function () {
       return request.action === 'add'
-        ? saveChoice(bookId, name, personalId)
+        ? saveChoice(bookId, name, personalId, String(request.cohort || ''), String(request.department || ''))
         : deleteChoice(bookId, name, personalId);
     }));
   }
@@ -146,8 +155,11 @@ function doPost(e) {
 // Actions
 // ---------------------------------------------------------------------------
 
-/** Saves a new choice, after checking all the rules. */
-function saveChoice(bookId, name, personalId) {
+/**
+ * Saves a new choice, after checking all the rules.
+ * cohort and department are needed only for a person's first choice.
+ */
+function saveChoice(bookId, name, personalId, cohort, department) {
   var rows = rowsOfPerson(personalId);
 
   var nameError = checkSameName(rows.concat(reviewsOfPerson(personalId)), name);
@@ -163,11 +175,24 @@ function saveChoice(bookId, name, personalId) {
       ' ספרים. כדי לבחור ספר אחר, הסירו קודם ספר מ"הבחירות שלי".' };
   }
 
+  var profile = profileOf(rows);
+  if (!profile) {
+    // First choice: the site must send the מחזור and מחלקה.
+    if (!cohort) {
+      return { ok: false, needProfile: true, error: 'זו הבחירה הראשונה שלך. יש לבחור מחזור ומחלקה.' };
+    }
+    var profileError = getCohortError(cohort) || getDepartmentError(cohort, department);
+    if (profileError) return { ok: false, needProfile: true, error: profileError };
+    profile = { cohort: cohort, department: needsDepartment(cohort) ? department : '' };
+  }
+
   var sheet = getSheet();
+  fillMissingHeaders(sheet, HEADERS);
   var newRow = nextFreeRow(sheet, 1);
   var range = sheet.getRange(newRow, 1, 1, HEADERS.length);
   range.setNumberFormat('@'); // save everything as text, so "0123456" keeps its leading 0
-  range.setValues([[new Date().toISOString(), bookId, BOOK_TITLES[bookId], name, personalId]]);
+  range.setValues([[new Date().toISOString(), bookId, BOOK_TITLES[bookId], name, personalId,
+    profile.cohort, profile.department]]);
   return { ok: true };
 }
 
@@ -184,6 +209,15 @@ function deleteChoice(bookId, name, personalId) {
   }
   getSheet().deleteRow(match.rowNumber);
   return { ok: true };
+}
+
+/**
+ * Returns {cohort, department} from a person's earlier choices, or null if
+ * none of them has a מחזור (a new person, or choices made before this was asked).
+ */
+function profileOf(rows) {
+  var withCohort = rows.filter(function (row) { return row.cohort; })[0];
+  return withCohort ? { cohort: withCohort.cohort, department: withCohort.department } : null;
 }
 
 /** Returns the book ids that this person chose. */
@@ -299,18 +333,34 @@ function readAdmins() {
 function getAllChoicesForAdmin() {
   var sheet = getSheet();
   if (sheet.getLastRow() < 2) return [];
-  return sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getDisplayValues()
+  var choices = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getDisplayValues()
     .map(function (cells) {
       return {
         date: String(cells[0]),
         bookId: Number(cells[COL_BOOK_ID - 1]),
         title: String(cells[2]),
         name: normalizeName(cells[COL_NAME - 1]),
-        personalId: String(cells[COL_PERSONAL_ID - 1])
+        personalId: String(cells[COL_PERSONAL_ID - 1]),
+        cohort: String(cells[COL_CHOICE_COHORT - 1]),
+        department: String(cells[COL_CHOICE_DEPARTMENT - 1])
       };
     })
-    .filter(function (choice) { return choice.name; })
-    .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    .filter(function (choice) { return choice.name; });
+  // Rows saved before מחזור was asked get it from the same person's newer rows.
+  var profiles = {};
+  choices.forEach(function (choice) {
+    if (choice.cohort && !profiles[choice.personalId]) {
+      profiles[choice.personalId] = { cohort: choice.cohort, department: choice.department };
+    }
+  });
+  choices.forEach(function (choice) {
+    var profile = profiles[choice.personalId];
+    if (!choice.cohort && profile) {
+      choice.cohort = profile.cohort;
+      choice.department = profile.department;
+    }
+  });
+  return choices.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
 }
 
 /** Returns the public site settings: {showCovers: true/false}. */
@@ -401,6 +451,17 @@ function getCohortError(cohort) {
   return COHORTS.indexOf(cohort) === -1 ? 'יש לבחור מחזור.' : '';
 }
 
+/** True if this מחזור is split into מחלקות. */
+function needsDepartment(cohort) {
+  return COHORTS_WITHOUT_DEPARTMENT.indexOf(cohort) === -1;
+}
+
+/** Returns an error message, or '' if the מחלקה fits the מחזור. */
+function getDepartmentError(cohort, department) {
+  if (!needsDepartment(cohort)) return '';
+  return DEPARTMENTS.indexOf(department) === -1 ? 'יש לבחור מחלקה.' : '';
+}
+
 /**
  * A personal number must always come with the same name.
  * This stops someone from seeing or changing another person's choices
@@ -433,6 +494,19 @@ function getOrCreateSheet(sheetName, headers) {
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+/** Adds header names for columns that were added after the tab was created. */
+function fillMissingHeaders(sheet, headers) {
+  var range = sheet.getRange(1, 1, 1, headers.length);
+  var current = range.getDisplayValues()[0];
+  var changed = false;
+  var filled = current.map(function (cell, index) {
+    if (cell) return cell;
+    changed = true;
+    return headers[index];
+  });
+  if (changed) range.setValues([filled]);
 }
 
 /**
@@ -470,7 +544,7 @@ function reviewsOfPerson(personalId) {
   return readAllReviews().filter(function (row) { return row.personalId === personalId; });
 }
 
-/** Reads every choice row as {rowNumber, bookId, name, personalId}. */
+/** Reads every choice row as {rowNumber, bookId, name, personalId, cohort, department}. */
 function readAllRows() {
   var sheet = getSheet();
   var lastRow = sheet.getLastRow();
@@ -481,7 +555,9 @@ function readAllRows() {
       rowNumber: index + 2,
       bookId: String(cells[COL_BOOK_ID - 1]),
       name: normalizeName(cells[COL_NAME - 1]),
-      personalId: String(cells[COL_PERSONAL_ID - 1])
+      personalId: String(cells[COL_PERSONAL_ID - 1]),
+      cohort: String(cells[COL_CHOICE_COHORT - 1]),
+      department: String(cells[COL_CHOICE_DEPARTMENT - 1])
     };
   });
 }

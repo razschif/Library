@@ -2,14 +2,16 @@
  * api.js - ALL communication with the server lives in this file.
  *
  * The rest of the site only calls these functions:
- *   submitChoice(bookId, name, id)  -> add a book to a person's choices
+ *   submitChoice(bookId, name, id, cohort, department) -> add a book to a person's choices.
+ *                                      cohort/department are needed only on the first choice;
+ *                                      without them the answer is {ok: false, needProfile: true}
  *   removeChoice(bookId, name, id)  -> remove a book from a person's choices
  *   getMyChoices(name, id)          -> the book ids a person chose
  *   getBookCounts()                 -> {bookId: number of people}, no personal details
  *   submitReview(bookId, name, id, rating, text, cohort) -> save (or replace) a person's review
  *   getReviews()                    -> {bookId: [{rating, text, date, name, cohort}]}, no personal numbers
  *   getSettings()                   -> {settings: {showCovers}} - public site settings
- *   adminGetData(name, id, password)          -> ADMINS ONLY: {settings, choices: [{date, bookId, title, name, personalId}]}
+ *   adminGetData(name, id, password)          -> ADMINS ONLY: {settings, choices: [{date, bookId, title, name, personalId, cohort, department}]}
  *   adminSaveSettings(name, id, password, settings) -> ADMINS ONLY: save settings, returns {settings}
  *   isDemoMode()                    -> true if no server is connected yet
  *
@@ -41,9 +43,9 @@ function isDemoMode() {
   return API_URL === "";
 }
 
-function submitChoice(bookId, name, id) {
-  if (isDemoMode()) return demoServer.add(bookId, name, id);
-  return postToServer({ action: "add", bookId, name, id });
+function submitChoice(bookId, name, id, cohort = "", department = "") {
+  if (isDemoMode()) return demoServer.add(bookId, name, id, cohort, department);
+  return postToServer({ action: "add", bookId, name, id, cohort, department });
 }
 
 function removeChoice(bookId, name, id) {
@@ -126,10 +128,13 @@ async function postToServer(data) {
 // ---------------------------------------------------------------------------
 
 const demoServer = (() => {
-  const people = new Map(); // personal id -> {name, bookIds: Map(bookId -> date chosen)}
+  const people = new Map(); // personal id -> {name, cohort, department, bookIds: Map(bookId -> date chosen)}
   const reviewers = new Map(); // personal id -> {name, byBook: Map(bookId -> review)}
   const settings = { showCovers: false };
   const DEMO_ADMIN = { name: "מנהל הדגמה", id: "1234567", password: "admin" };
+  const COHORTS = ['כ', 'כ"א', 'כ"ב', 'סגל'];
+  const DEPARTMENTS = ["1", "2", "3"];
+  const needsDepartment = (cohort) => cohort !== "סגל";
 
   // Wait a little, like a real network request would.
   const answer = (result) => new Promise((resolve) => setTimeout(() => resolve(result), 300));
@@ -144,12 +149,23 @@ const demoServer = (() => {
   }
 
   return {
-    add(bookId, name, id) {
+    add(bookId, name, id, cohort, department) {
       const error = checkPerson(name, id);
       if (error) return answer({ ok: false, error });
       const person = people.get(id) || { name: cleanName(name), bookIds: new Map() };
       if (person.bookIds.has(bookId)) {
         return answer({ ok: false, error: 'כבר בחרת בספר הזה. הוא מופיע ב"הבחירות שלי".' });
+      }
+      if (!person.cohort) {
+        if (!cohort) {
+          return answer({ ok: false, needProfile: true, error: "זו הבחירה הראשונה שלך. יש לבחור מחזור ומחלקה." });
+        }
+        if (!COHORTS.includes(cohort)) return answer({ ok: false, needProfile: true, error: "יש לבחור מחזור." });
+        if (needsDepartment(cohort) && !DEPARTMENTS.includes(department)) {
+          return answer({ ok: false, needProfile: true, error: "יש לבחור מחלקה." });
+        }
+        person.cohort = cohort;
+        person.department = needsDepartment(cohort) ? department : "";
       }
       person.bookIds.set(bookId, new Date().toISOString());
       people.set(id, person);
@@ -215,7 +231,8 @@ const demoServer = (() => {
       const choices = [];
       for (const [personalId, person] of people) {
         for (const [bookId, date] of person.bookIds) {
-          choices.push({ date, bookId, title: "", name: person.name, personalId });
+          choices.push({ date, bookId, title: "", name: person.name, personalId,
+            cohort: person.cohort, department: person.department });
         }
       }
       choices.sort((a, b) => (a.date < b.date ? 1 : -1));

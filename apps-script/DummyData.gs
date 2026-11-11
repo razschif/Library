@@ -40,6 +40,7 @@ function addDummyData() {
     removeDummyRows();
     var data = buildDummyRows();
     appendDummyRows(getOrCreateSheet(REVIEWS_SHEET_NAME, REVIEW_HEADERS), data.reviews);
+    fillMissingHeaders(getSheet(), HEADERS);
     appendDummyRows(getSheet(), data.choices);
     return { ok: true, reviews: data.reviews.length, choices: data.choices.length };
   });
@@ -53,10 +54,15 @@ function removeDummyData() {
   }));
 }
 
-/** Returns the sample people as {name, id, cohort}. */
+/** Returns the sample people as {name, id, cohort, department}. */
 function dummyPeople() {
   return DUMMY_PEOPLE.map(function (person, index) {
-    return { name: person[0], cohort: person[1], id: ('000000' + (index + 1)).slice(-7) };
+    return {
+      name: person[0],
+      cohort: person[1],
+      department: needsDepartment(person[1]) ? DEPARTMENTS[index % DEPARTMENTS.length] : '',
+      id: ('000000' + (index + 1)).slice(-7)
+    };
   });
 }
 
@@ -87,7 +93,8 @@ function buildDummyRows() {
         String(rating), pick(DUMMY_TEXTS[rating]), person.cohort]);
     });
     bookIds.slice(0, DUMMY_CHOICES_PER_PERSON).forEach(function (bookId) {
-      choices.push([recentTime(), bookId, BOOK_TITLES[bookId], person.name, person.id]);
+      choices.push([recentTime(), bookId, BOOK_TITLES[bookId], person.name, person.id,
+        person.cohort, person.department]);
     });
   });
   return { reviews: reviews, choices: choices };

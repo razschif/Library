@@ -119,6 +119,33 @@
         <span class="field-error" id="choose-id-error" aria-live="polite"></span>
       </label>
 
+      <!-- Shown only on a person's first choice (the server says when) -->
+      <div id="choose-profile" hidden>
+        <p class="hint" id="choose-profile-hint">זו הבחירה הראשונה שלך, לכן יש לבחור גם מחזור ומחלקה. בבחירות הבאות לא תצטרכו.</p>
+        <label class="field">
+          <span>מחזור</span>
+          <select id="choose-cohort">
+            <option value="">בחירת מחזור</option>
+            <option value="כ">כ</option>
+            <option value='כ"א'>כ"א</option>
+            <option value='כ"ב'>כ"ב</option>
+            <option value="סגל">סגל</option>
+          </select>
+          <span class="field-error" id="choose-cohort-error" aria-live="polite"></span>
+        </label>
+        <!-- סגל has no מחלקות, so this is hidden for סגל -->
+        <label class="field" id="choose-department-field" hidden>
+          <span>מחלקה</span>
+          <select id="choose-department">
+            <option value="">בחירת מחלקה</option>
+            <option value="1">מחלקה 1</option>
+            <option value="2">מחלקה 2</option>
+            <option value="3">מחלקה 3</option>
+          </select>
+          <span class="field-error" id="choose-department-error" aria-live="polite"></span>
+        </label>
+      </div>
+
       <p class="form-error" id="choose-error" role="alert" hidden></p>
 
       <div class="dialog-buttons">
@@ -303,7 +330,7 @@
         <div class="admin-tools">
           <label class="control">
             <span class="control-label">חיפוש</span>
-            <input type="search" id="admin-search" placeholder="שם, מספר אישי או ספר">
+            <input type="search" id="admin-search" placeholder="שם, מספר אישי, מחזור או ספר">
           </label>
           <label class="control">
             <span class="control-label">תצוגה</span>
